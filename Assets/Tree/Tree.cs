@@ -1,9 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Numerics;
 using UnityEngine;
-using Vector3 = UnityEngine.Vector3;
-using Vector2 = UnityEngine.Vector2;
 
 public class Example : MonoBehaviour {
     [SerializeField] Vector3[] newVertices;
@@ -12,7 +9,7 @@ public class Example : MonoBehaviour {
 
     void Start() {
 
-        (List<Vector3> vertices, List<int> triangles) = GenerateMeshBranch(new(0, 0, 0), 2, 0, new(0, 1, 0), 1, 1, 4);
+        (List<Vector3> vertices, List<int> triangles) = GenerateMeshBranch(new(0, 0, 0), 2, 0, new(0, 5, 0), 1, 1, 12);
         vertices.Insert(0, new(0, 0, 0));
 
         Mesh mesh = new Mesh {
@@ -57,18 +54,36 @@ public class Example : MonoBehaviour {
         List<int> triangles = new();
 
         // Triangles between the two rings
-        for (int i = 0; i < circleResolution; i += 1) {
+        for (int i = 0 ; i < circleResolution; i += 1) {
             int lower0 = startingIndex + i;
             int upper0 = startingIndex + i + circleResolution;
             int lower1 = lower0 + 1;
             int upper1 = upper0 + 1;
             // Wrap back around at the final iteration
             if (i == circleResolution - 1) {
-                lower1 = lower0 - i;
-                upper1 = upper0 - i;
+                lower1 = startingIndex;
+                upper1 = startingIndex + circleResolution;
             }
 
-            triangles.AddRange(new List<int>(){ lower0, upper0, lower1,     upper0, upper1, lower1});
+            triangles.AddRange(new List<int>(){ lower0, upper0, lower1,     upper0, upper1, lower1 });
+        }
+
+        // Triangles between upper ring and v2
+        for (int i = 0 ; i < circleResolution ; i += 1) {
+            int upper0 = startingIndex + i + circleResolution;
+            int upper1 = upper0 + 1;
+            if (i == circleResolution - 1) upper1 = startingIndex + circleResolution;
+
+            triangles.AddRange(new List<int>(){ startingIndex + 2 * circleResolution, upper1, upper0 });
+        }
+
+        // Triangles between lower ring and v1
+        for (int i = 0 ; i < circleResolution ; i += 1) {
+            int lower0 = startingIndex + i;
+            int lower1 = lower0 + 1;
+            if (i == circleResolution - 1) lower1 = startingIndex;
+
+            triangles.AddRange(new List<int>(){ v1Index, lower0, lower1 });
         }
 
         return new(vertices, triangles);        
