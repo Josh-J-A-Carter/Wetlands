@@ -32,6 +32,8 @@ public class TreeMesh : MonoBehaviour {
                                                     parent.index, child.pos, child.width, vertices.Count, BRANCH_RESOLUTION);
                     vertices.AddRange(deltaVertices);
                     triangles.AddRange(deltaTriangles);
+
+                    child.index = vertices.Count - 1;
                 }
             }
 
