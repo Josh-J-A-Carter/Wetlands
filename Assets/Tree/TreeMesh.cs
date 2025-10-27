@@ -1,16 +1,22 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(MeshRenderer)), RequireComponent(typeof(MeshFilter))]
 public class TreeMesh : MonoBehaviour {
 
+    [SerializeField]
+    int pDepth = 10;
+
+    [SerializeField]
+    float pBranching = 2.25f, pAngle = 0.2f, pMaxWidth = 3.0f, pMaxLength = 20.0f, pDecrWidthFactor = 0.5f, pDecrLengthFactor = 0.25f;
+
+
     TreeSkeleton skeleton;
 
     const int BRANCH_RESOLUTION = 12;
 
     void Start() {
-        skeleton = new(5, 2, Mathf.PI / 3.0f, 20.0f, 4.0f, 0.4f);
+        skeleton = new(pDepth, pBranching, pAngle, pMaxLength, pMaxWidth, pDecrLengthFactor, pDecrWidthFactor);
 
         // Recurse through the tree skeleton, and add a new branch at each step.
         List<Vector3> vertices = new(){ Vector3.zero };

@@ -16,15 +16,17 @@ public class TreeSkeleton {
     float pAngle;
     float pMaxLength;
     float pMaxWidth;
-    float pDownsizeFactor;
+    float pDecrLengthFactor;
+    float pDecrWidthFactor;
 
-    public TreeSkeleton(int pDepth, float pBranching, float pAngle, float pMaxLength, float pMaxWidth, float pDownsizeFactor) {
+    public TreeSkeleton(int pDepth, float pBranching, float pAngle, float pMaxLength, float pMaxWidth, float pDecrLengthFactor, float pDecrWidthFactor) {
         this.pDepth = pDepth;
         this.pBranching = pBranching;
         this.pAngle = pAngle;
         this.pMaxLength = pMaxLength;
         this.pMaxWidth = pMaxWidth;
-        this.pDownsizeFactor = pDownsizeFactor;
+        this.pDecrLengthFactor = pDecrLengthFactor;
+        this.pDecrWidthFactor = pDecrWidthFactor;
 
         root = new(Vector3.zero, null, pMaxWidth);
         List<Node> frontier = new() { root };
@@ -41,9 +43,13 @@ public class TreeSkeleton {
                 // Find a basis for the 2D subspace with normal = parent.ThroughLine()
                 Vector3 normal = parent.ThroughLine();
                 Vector3[] subspaceBasis = MeshUtility.FindPlaneBasis(normal);
+                // Randomly choose somewhere on the circle to seed branch selection
+                // If we don't do this, the tree will tend to generate in a plane,
+                // because the subspace basis vectors tend to lie in a plane
+                float theta0 = Random.Range(0.0f, 2 * Mathf.PI);
 
                 for (int i = 0 ; i < branches ; i += 1) {
-                    Vector3 pos = GenDirection(depth, subspaceBasis, normal, branches, i) + parent.pos;
+                    Vector3 pos = GenDirection(depth, subspaceBasis, normal, branches, theta0, i) + parent.pos;
                     float width = GenWidth(depth);
                     Node child = new(pos, parent, width);
 
@@ -66,11 +72,11 @@ public class TreeSkeleton {
         return b;
     }
 
-    Vector3 GenDirection(float currDepth, Vector3[] subspaceBasis, Vector3 normal, int branches, int iteration) {
+    Vector3 GenDirection(float currDepth, Vector3[] subspaceBasis, Vector3 normal, int branches, float theta0, int iteration) {
         // If this is the first branch, it should be going up.
-        if (currDepth == 1) return Mathf.Exp(- pDownsizeFactor * (currDepth - 1)) * pMaxLength * Vector3.up;
+        if (currDepth == 1) return Mathf.Exp(- pDecrLengthFactor * (currDepth - 1)) * pMaxLength * Vector3.up;
 
-        float theta = 2 * Mathf.PI * iteration / branches;
+        float theta = theta0 + 2 * Mathf.PI * iteration / branches;
         // This is where the desired direction should be when it is projected onto the plane.
         Vector3 dirProjected = Mathf.Cos(theta) * subspaceBasis[0] + Mathf.Sin(theta) * subspaceBasis[1];
         dirProjected = dirProjected.normalized;
@@ -83,11 +89,11 @@ public class TreeSkeleton {
         
         // currDepth - 1, since we start looping with depth = 1
         // We want the length multiplier to be 1 for the first iteration, but Exp(0) = 1
-        return Mathf.Exp(- pDownsizeFactor * (currDepth - 1)) * pMaxLength * dir.normalized;
+        return Mathf.Exp(- pDecrLengthFactor * (currDepth - 1)) * pMaxLength * dir.normalized;
     }
 
     float GenWidth(float currDepth) {
-        return pMaxWidth * Mathf.Exp(- pDownsizeFactor * currDepth);
+        return pMaxWidth * Mathf.Exp(- pDecrWidthFactor * currDepth);
     }
 
 }
