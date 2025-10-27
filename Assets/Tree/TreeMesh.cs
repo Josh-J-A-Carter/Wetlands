@@ -2,15 +2,41 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Example : MonoBehaviour {
-    [SerializeField] Vector3[] newVertices;
-    [SerializeField] Vector2[] newUV;
-    [SerializeField] int[] newTriangles;
+[RequireComponent(typeof(MeshRenderer)), RequireComponent(typeof(MeshFilter))]
+public class TreeMesh : MonoBehaviour {
+
+    TreeSkeleton skeleton;
+
+    const int BRANCH_RESOLUTION = 12;
 
     void Start() {
+        skeleton = new(5, 2, Mathf.PI / 3.0f, 20.0f, 4.0f, 0.4f);
 
-        (List<Vector3> vertices, List<int> triangles) = GenerateMeshBranch(new(0, 0, 0), 2, 0, new(0, 5, 0), 1, 1, 12);
-        vertices.Insert(0, new(0, 0, 0));
+        // Recurse through the tree skeleton, and add a new branch at each step.
+        List<Vector3> vertices = new(){ Vector3.zero };
+        List<int> triangles = new();
+
+        List<Node> frontier = new() { skeleton.root };
+        skeleton.root.index = 0;
+
+        while (frontier.Count > 0) {
+
+            List<Node> newFrontier = new();
+
+            foreach (Node parent in frontier) {
+                if (parent.children.Count == 0) continue;
+
+                foreach (Node child in parent.children) {
+                    newFrontier.Add(child);
+                    (List<Vector3> deltaVertices, List<int> deltaTriangles) = GenerateMeshBranch(parent.pos, parent.width,
+                                                    parent.index, child.pos, child.width, vertices.Count, BRANCH_RESOLUTION);
+                    vertices.AddRange(deltaVertices);
+                    triangles.AddRange(deltaTriangles);
+                }
+            }
+
+            frontier = newFrontier;
+        }
 
         Mesh mesh = new Mesh {
             vertices = vertices.ToArray(),
@@ -28,21 +54,7 @@ public class Example : MonoBehaviour {
             int startingIndex, int circleResolution) {
         Vector3 normal = Vector3.Normalize(v2 - v1);
 
-        // Find a basis for the plane with this normal, which goes through the origin
-        // (so that it's a subspace, not an affine subspace)
-        Vector3[] standardBasis = { new(1, 0, 0), new(0, 1, 0), new(0, 0, 1) };
-        Vector3[] crossVectors = new Vector3[3];
-        for (int i = 0; i < 3; i += 1) crossVectors[i] = Vector3.Cross(standardBasis[i], normal);
-
-        Vector3[] subspaceBasis = new Vector3[2];
-
-        foreach (Vector3 v in crossVectors) {
-            if (v == Vector3.zero) continue;
-
-            subspaceBasis[0] = v;
-            subspaceBasis[1] = Vector3.Cross(v, normal);
-            break;
-        }
+        Vector3[] subspaceBasis = MeshUtility.FindPlaneBasis(normal);
 
         List<Vector3> ring1 = CalculateMeshBranchRing(v1, subspaceBasis, circleResolution, w1);
         List<Vector3> ring2 = CalculateMeshBranchRing(v2, subspaceBasis, circleResolution, w2);
