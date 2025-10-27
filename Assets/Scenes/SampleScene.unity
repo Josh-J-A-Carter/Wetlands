@@ -457,7 +457,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 28527e58046730346959f9a662c55e8b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pDepth: 10
+  pDepth: 8
   pBranching: 2.25
   pAngle: 0.3
   pMaxWidth: 3
