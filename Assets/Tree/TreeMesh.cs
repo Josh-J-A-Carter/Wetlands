@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(MeshRenderer)), RequireComponent(typeof(MeshFilter))]
 public class TreeMesh : MonoBehaviour {
@@ -10,20 +11,35 @@ public class TreeMesh : MonoBehaviour {
     [SerializeField]
     float pBranching = 2.25f, pAngle = 0.2f, pMaxWidth = 3.0f, pMaxLength = 20.0f, pDecrWidthFactor = 0.5f, pDecrLengthFactor = 0.25f;
 
-
     TreeSkeleton skeleton;
 
-    const int BRANCH_RESOLUTION = 12;
+    const int MAX_BRANCH_RESOLUTION = 12;
+    const int MIN_BRANCH_RESOLUTION = 4;
+
+    Mesh mesh;
 
     void Start() {
         skeleton = new(pDepth, pBranching, pAngle, pMaxLength, pMaxWidth, pDecrLengthFactor, pDecrWidthFactor);
+        mesh = new();
 
+        RegenerateMesh();
+    }
+
+    void Update() {
+        if (Keyboard.current.eKey.wasPressedThisFrame) {
+            skeleton = new(pDepth, pBranching, pAngle, pMaxLength, pMaxWidth, pDecrLengthFactor, pDecrWidthFactor);
+            RegenerateMesh();
+        }
+    }
+
+    void RegenerateMesh() {
         // Recurse through the tree skeleton, and add a new branch at each step.
         List<Vector3> vertices = new(){ Vector3.zero };
         List<int> triangles = new();
 
         List<Node> frontier = new() { skeleton.root };
         skeleton.root.index = 0;
+        int depth = 0;
 
         while (frontier.Count > 0) {
 
@@ -33,25 +49,27 @@ public class TreeMesh : MonoBehaviour {
                 if (parent.children.Count == 0) continue;
 
                 foreach (Node child in parent.children) {
-                    newFrontier.Add(child);
+                    int resolution = -2 * (depth * depth) + MAX_BRANCH_RESOLUTION;
+                    if (resolution < MIN_BRANCH_RESOLUTION) resolution = MIN_BRANCH_RESOLUTION;
+
                     (List<Vector3> deltaVertices, List<int> deltaTriangles) = GenerateMeshBranch(parent.pos, parent.width,
-                                                    parent.index, child.pos, child.width, vertices.Count, BRANCH_RESOLUTION);
+                                                    parent.index, child.pos, child.width, vertices.Count, resolution);
                     vertices.AddRange(deltaVertices);
                     triangles.AddRange(deltaTriangles);
 
                     child.index = vertices.Count - 1;
+                    newFrontier.Add(child);
                 }
             }
 
             frontier = newFrontier;
+            depth += 1;
         }
 
-        Mesh mesh = new Mesh {
-            vertices = vertices.ToArray(),
-            // uv = newUV,
-            triangles = triangles.ToArray()
-        };
+        mesh.Clear();
 
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
         mesh.RecalculateNormals();
         
         // This assignment is temporary and will reset to the initial Mesh when exiting Play mode.

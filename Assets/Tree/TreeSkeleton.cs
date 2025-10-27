@@ -5,11 +5,12 @@ public class TreeSkeleton {
 
     public Node root { get; private set; }
 
-    const int MAX_DEPTH_UNDERSHOOT = 2;
-    const int MAX_DEPTH_OVERSHOOT = 2;
+    const int MAX_DEPTH_UNDERSHOOT = 1;
+    const int MAX_DEPTH_OVERSHOOT = 1;
 
     const float MAX_ANGLE_UNDERSHOOT = 3.14f / 6.0f;
     const float MAX_ANGLE_OVERSHOOT = 3.14f / 6.0f;
+    const float MIN_ANGLE = 0.1f;
 
     int pDepth;
     float pBranching;
@@ -82,6 +83,7 @@ public class TreeSkeleton {
         dirProjected = dirProjected.normalized;
         // Now, we reconstruct the desired branch direction, so that dir makes an angle phi ~ pAngle with normal
         float phi = Random.Range(pAngle - MAX_ANGLE_UNDERSHOOT, pAngle + MAX_ANGLE_OVERSHOOT);
+        if (phi < MIN_ANGLE) phi = MIN_ANGLE;
 
         Vector3 dir = Mathf.Cos(phi) * normal + Mathf.Sin(phi) * dirProjected;
 

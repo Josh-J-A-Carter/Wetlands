@@ -457,15 +457,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 28527e58046730346959f9a662c55e8b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  newVertices:
-  - {x: 0, y: 0, z: 0}
-  - {x: 0, y: 1, z: 0}
-  - {x: 0, y: 0, z: 1}
-  newUV:
-  - {x: 0, y: 0}
-  - {x: 0, y: 0}
-  - {x: 0, y: 0}
-  newTriangles: 000000000100000002000000
+  pDepth: 10
+  pBranching: 2.25
+  pAngle: 0.3
+  pMaxWidth: 3
+  pMaxLength: 20
+  pDecrWidthFactor: 0.5
+  pDecrLengthFactor: 0.25
 --- !u!4 &1929445574
 Transform:
   m_ObjectHideFlags: 0
