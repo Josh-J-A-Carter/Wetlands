@@ -20,6 +20,8 @@ public class TreeSkeleton {
     float pDecrLengthFactor;
     float pDecrWidthFactor;
 
+    public int depth { get; private set; }
+
     public TreeSkeleton(int pDepth, float pBranching, float pAngle, float pMaxLength, float pMaxWidth, float pDecrLengthFactor, float pDecrWidthFactor) {
         this.pDepth = pDepth;
         this.pBranching = pBranching;
@@ -32,15 +34,16 @@ public class TreeSkeleton {
         root = new(Vector3.zero, null, pMaxWidth);
         List<Node> frontier = new() { root };
 
-        int depth = 1;
-        int maxDepth = Mathf.Max(Random.Range(pDepth - MAX_DEPTH_UNDERSHOOT, pDepth + MAX_DEPTH_OVERSHOOT), 3);
+        int currDepth = 1;
+        // depth = Mathf.Max(Random.Range(pDepth - MAX_DEPTH_UNDERSHOOT, pDepth + MAX_DEPTH_OVERSHOOT), 3);
+        depth = pDepth;
 
-        while (frontier.Count > 0 && depth < maxDepth) {
+        while (frontier.Count > 0 && currDepth < pDepth) {
             List<Node> newFrontier = new();
 
             foreach (Node parent in frontier) {
                 // How many branches to attach here?
-                int branches = GenNumBranches(depth);
+                int branches = GenNumBranches(currDepth);
                 // Find a basis for the 2D subspace with normal = parent.ThroughLine()
                 Vector3 normal = parent.ThroughLine();
                 Vector3[] subspaceBasis = MeshUtility.FindPlaneBasis(normal);
@@ -50,8 +53,8 @@ public class TreeSkeleton {
                 float theta0 = Random.Range(0.0f, 2 * Mathf.PI);
 
                 for (int i = 0 ; i < branches ; i += 1) {
-                    Vector3 pos = GenDirection(depth, subspaceBasis, normal, branches, theta0, i) + parent.pos;
-                    float width = GenWidth(depth);
+                    Vector3 pos = GenDirection(currDepth, subspaceBasis, normal, branches, theta0, i) + parent.pos;
+                    float width = GenWidth(currDepth);
                     Node child = new(pos, parent, width);
 
                     parent.children.Add(child);
@@ -60,7 +63,7 @@ public class TreeSkeleton {
             }
 
             frontier = newFrontier;
-            depth += 1;
+            currDepth += 1;
         }
     }
 

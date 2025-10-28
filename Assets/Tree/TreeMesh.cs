@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -18,19 +19,73 @@ public class TreeMesh : MonoBehaviour {
 
     Mesh mesh;
 
+
+    int growthStage = 0;
+    float growthStageProgress = 0.0f;
+    bool growthComplete = false;
+
+    const float GROWTH_PROGRESS_INCREMENT = 0.00625f;
+
+    const float GROWTH_PROGRESS_DELAY = 0.1f;
+
     void Start() {
-        skeleton = new(pDepth, pBranching, pAngle, pMaxLength, pMaxWidth, pDecrLengthFactor, pDecrWidthFactor);
         mesh = new();
+        GetComponent<MeshFilter>().mesh = mesh;
+
+        ResetTree();
+    }
+
+    void ResetTree() {
+        skeleton = new(pDepth, pBranching, pAngle, pMaxLength, pMaxWidth, pDecrLengthFactor, pDecrWidthFactor);
+        growthStage = 0;
+        growthStageProgress = 0.0f;
+        growthComplete = false;
 
         RegenerateMesh();
+
+        StartCoroutine(GrowTick());        
     }
 
     void Update() {
         if (Keyboard.current.eKey.wasPressedThisFrame) {
-            skeleton = new(pDepth, pBranching, pAngle, pMaxLength, pMaxWidth, pDecrLengthFactor, pDecrWidthFactor);
-            RegenerateMesh();
+            ResetTree();
         }
     }
+
+    IEnumerator GrowTick() {
+        while (growthComplete == false) {
+            yield return new WaitForSeconds(GROWTH_PROGRESS_DELAY);
+            Grow();
+        }
+    }
+
+    void Grow() {
+        if (growthComplete) return;
+
+        growthStageProgress += GROWTH_PROGRESS_INCREMENT;
+
+        if (growthStageProgress >= 1.0f) {
+            growthStage += 1;
+            growthStageProgress = 0.0f;
+            if (growthStage >= skeleton.depth) growthComplete = true;
+        }
+
+        RegenerateMesh();
+    }
+
+    float GetGrowthFactor() {
+        if (growthComplete) return 1.0f;
+
+        //
+        // We have depth - 1 branches, so depth - 1 branches (starting from 0)
+        // so we can allocate 1 / depth growth factor at each stage
+        // At stage 0, we have (0 + progress) / depth  growth
+        // At stage 1, we have (1 + progress) / depth
+        // ...
+        // Once complete, we can't rely on 'progress' being correctly set, but growth is 1.0 (maximal)
+        return (growthStage + growthStageProgress) / skeleton.depth;
+    }
+
 
     void RegenerateMesh() {
         // Recurse through the tree skeleton, and add a new branch at each step.
@@ -53,8 +108,17 @@ public class TreeMesh : MonoBehaviour {
                     if (depth >= 3) resolution = (MAX_BRANCH_RESOLUTION + MIN_BRANCH_RESOLUTION) / 2;
                     if (depth >= 5) resolution = MIN_BRANCH_RESOLUTION;
 
+                    // Has the tree fully grown up to this point?
+                    // If not, we need to pick an intermediate point on the branch
+                    Vector3 targetPos = child.pos;
+                    float targetWidth = child.width;
+                    if (depth == growthStage) {
+                        targetPos = parent.pos + (child.pos - parent.pos) * growthStageProgress;
+                        targetWidth *= Mathf.Exp(2 * (growthStageProgress - 1));
+                    }
+
                     (List<Vector3> deltaVertices, List<int> deltaTriangles) = GenerateMeshBranch(parent.pos, parent.width,
-                                                    parent.index, child.pos, child.width, vertices.Count, resolution);
+                                                    parent.index, targetPos, targetWidth, vertices.Count, resolution);
                     vertices.AddRange(deltaVertices);
                     triangles.AddRange(deltaTriangles);
 
@@ -63,18 +127,22 @@ public class TreeMesh : MonoBehaviour {
                 }
             }
 
+            // Tree hasn't grown path this depth yet
+            if (depth == growthStage) break;
+
             frontier = newFrontier;
             depth += 1;
         }
 
-        mesh.Clear();
+        // Scale the entire tree according to its age.
+        float growthFactor = GetGrowthFactor();
+        for (int i = 0 ; i < vertices.Count ; i += 1) vertices[i] = vertices[i] * growthFactor;
 
+        // Refresh the mesh
+        mesh.Clear();
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
-        mesh.RecalculateNormals();
-        
-        // This assignment is temporary and will reset to the initial Mesh when exiting Play mode.
-        GetComponent<MeshFilter>().mesh = mesh;
+        mesh.RecalculateNormals();        
     }
 
     KeyValuePair<List<Vector3>, List<int>> GenerateMeshBranch(Vector3 v1, float w1, int v1Index, Vector3 v2, float w2,
