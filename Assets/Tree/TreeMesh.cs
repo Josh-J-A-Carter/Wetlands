@@ -49,8 +49,9 @@ public class TreeMesh : MonoBehaviour {
                 if (parent.children.Count == 0) continue;
 
                 foreach (Node child in parent.children) {
-                    int resolution = -2 * depth * (depth - 1) + MAX_BRANCH_RESOLUTION;
-                    if (resolution < MIN_BRANCH_RESOLUTION) resolution = MIN_BRANCH_RESOLUTION;
+                    int resolution = MAX_BRANCH_RESOLUTION;
+                    if (depth >= 3) resolution = (MAX_BRANCH_RESOLUTION + MIN_BRANCH_RESOLUTION) / 2;
+                    if (depth >= 5) resolution = MIN_BRANCH_RESOLUTION;
 
                     (List<Vector3> deltaVertices, List<int> deltaTriangles) = GenerateMeshBranch(parent.pos, parent.width,
                                                     parent.index, child.pos, child.width, vertices.Count, resolution);
