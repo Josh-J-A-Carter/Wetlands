@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -90,6 +91,7 @@ public class TreeMesh : MonoBehaviour {
     void RegenerateMesh() {
         // Recurse through the tree skeleton, and add a new branch at each step.
         List<Vector3> vertices = new(){ Vector3.zero };
+        List<Vector2> uv2 = new() { ComputeUV2(0, false) };
         List<int> triangles = new();
 
         List<Node> frontier = new() { skeleton.root };
@@ -122,6 +124,13 @@ public class TreeMesh : MonoBehaviour {
                     vertices.AddRange(deltaVertices);
                     triangles.AddRange(deltaTriangles);
 
+                    // Update the UV2 coordinates, with respect to the upper and lower rings of the cylinder
+                    // Upper ring contains an extra vertex
+                    Vector2 uvLower = ComputeUV2(depth, false);
+                    Vector2 uvUpper = ComputeUV2(depth, true);
+                    uv2.AddRange(Enumerable.Repeat(uvLower, resolution));
+                    uv2.AddRange(Enumerable.Repeat(uvUpper, resolution + 1));
+
                     child.index = vertices.Count - 1;
                     newFrontier.Add(child);
                 }
@@ -142,7 +151,24 @@ public class TreeMesh : MonoBehaviour {
         mesh.Clear();
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
+        mesh.uv2 = uv2.ToArray();
         mesh.RecalculateNormals();        
+    }
+
+    Vector2 ComputeUV2(int currDepth, bool upperRing) {
+        if (currDepth < growthStage - 2) return new(0, 0);
+
+        if (currDepth == growthStage - 2) {
+            if (upperRing) return new(1 - growthStageProgress, 0);
+            return new(0, 0);
+        }
+
+        if (currDepth == growthStage - 1) {
+            if (upperRing) return new(1, 0);
+            return new(1 - growthStageProgress, 0);
+        }
+
+        return new(1, 0);
     }
 
     KeyValuePair<List<Vector3>, List<int>> GenerateMeshBranch(Vector3 v1, float w1, int v1Index, Vector3 v2, float w2,
