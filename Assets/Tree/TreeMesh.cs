@@ -156,19 +156,15 @@ public class TreeMesh : MonoBehaviour {
     }
 
     Vector2 ComputeUV2(int currDepth, bool upperRing) {
-        if (currDepth < growthStage - 2) return new(0, 0);
+        if (currDepth < growthStage - 1) return new(0, 0);
 
-        if (currDepth == growthStage - 2) {
+        if (currDepth == growthStage - 1) {
             if (upperRing) return new(1 - growthStageProgress, 0);
             return new(0, 0);
         }
 
-        if (currDepth == growthStage - 1) {
-            if (upperRing) return new(1, 0);
-            return new(1 - growthStageProgress, 0);
-        }
-
-        return new(1, 0);
+        if (upperRing) return new(1, 0);
+        return new(1 - growthStageProgress, 0);
     }
 
     KeyValuePair<List<Vector3>, List<int>> GenerateMeshBranch(Vector3 v1, float w1, int v1Index, Vector3 v2, float w2,
