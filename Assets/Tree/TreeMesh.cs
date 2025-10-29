@@ -91,6 +91,7 @@ public class TreeMesh : MonoBehaviour {
     void RegenerateMesh() {
         // Recurse through the tree skeleton, and add a new branch at each step.
         List<Vector3> vertices = new(){ Vector3.zero };
+        List<Vector2> uv = new() { Vector2.zero };
         List<Vector2> uv2 = new() { ComputeUV2(0, false) };
         List<int> triangles = new();
 
@@ -124,12 +125,17 @@ public class TreeMesh : MonoBehaviour {
                     vertices.AddRange(deltaVertices);
                     triangles.AddRange(deltaTriangles);
 
-                    // Update the UV2 coordinates, with respect to the upper and lower rings of the cylinder
+                    // Add the UV2 coordinates, with respect to the upper and lower rings of the cylinder
                     // Upper ring contains an extra vertex
                     Vector2 uvLower = ComputeUV2(depth, false);
                     Vector2 uvUpper = ComputeUV2(depth, true);
                     uv2.AddRange(Enumerable.Repeat(uvLower, resolution));
                     uv2.AddRange(Enumerable.Repeat(uvUpper, resolution + 1));
+
+                    // Add the UV coordinates, first lower ring, then upper ring, finally the top vertex
+                    for (int i = 0 ; i < resolution ; i += 1) uv.Add(ComputeUV(i, resolution, false));
+                    for (int i = 0 ; i < resolution ; i += 1) uv.Add(ComputeUV(i, resolution, true));
+                    uv.Add( Vector2.zero );
 
                     child.index = vertices.Count - 1;
                     newFrontier.Add(child);
@@ -151,8 +157,25 @@ public class TreeMesh : MonoBehaviour {
         mesh.Clear();
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
+        mesh.uv = uv.ToArray();
         mesh.uv2 = uv2.ToArray();
         mesh.RecalculateNormals();        
+    }
+
+    Vector2 ComputeUV(int i, int res, bool upperRing) {
+        // This is a hack.
+        // The cylinder wraps around on itself, which means we can't use a 
+        // single surface patch to cover it.
+        // Here, I've just made the U coordinate go from 0 -> 0.5 -> 0
+        // The proper solution is to have an extra column of vertices in the cylinder,
+        // which overlap the first column
+        float deltaU = 1.0f / res;
+        float u = deltaU * i;
+        if (u > 0.5f) u = 1 - u - (res % 2 == 0 ? 0.0f : deltaU);
+
+        float v = upperRing ? 1.0f : 0.0f;
+
+        return new(u, v);
     }
 
     Vector2 ComputeUV2(int currDepth, bool upperRing) {
