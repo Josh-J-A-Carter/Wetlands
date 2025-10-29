@@ -119,8 +119,8 @@ public class TreeMesh : MonoBehaviour {
                         targetWidth *= Mathf.Exp(2 * (growthStageProgress - 1));
                     }
 
-                    (List<Vector3> deltaVertices, List<int> deltaTriangles) = GenerateMeshBranch(parent.pos, parent.width,
-                                                    parent.index, targetPos, targetWidth, vertices.Count, resolution);
+                    (List<Vector3> deltaVertices, List<int> deltaTriangles) = GenerateMeshBranch(parent.pos, parent.width * AgePercentage(),
+                                                    parent.index, targetPos, targetWidth * AgePercentage(), vertices.Count, resolution);
                     vertices.AddRange(deltaVertices);
                     triangles.AddRange(deltaTriangles);
 
@@ -165,6 +165,10 @@ public class TreeMesh : MonoBehaviour {
 
         if (upperRing) return new(1, 0);
         return new(1 - growthStageProgress, 0);
+    }
+
+    float AgePercentage() {
+        return (growthStage + growthStageProgress) / skeleton.depth;
     }
 
     KeyValuePair<List<Vector3>, List<int>> GenerateMeshBranch(Vector3 v1, float w1, int v1Index, Vector3 v2, float w2,
