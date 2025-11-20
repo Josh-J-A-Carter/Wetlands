@@ -3,6 +3,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.Assertions;
 using System.Linq;
+using UnityEditor.ShaderGraph.Internal;
 
 public static class TreeMeshGenerator {
 
@@ -13,6 +14,8 @@ public static class TreeMeshGenerator {
         public List<Vector3> vertices;
         public List<int> triangles;
 
+        public List<GizmoData> gizmos;
+
         public int branchRingResolution;
 
         public TreeMeshGeneratorState(Tree tree, int branchRingResolution) {
@@ -21,16 +24,17 @@ public static class TreeMeshGenerator {
 
             vertices = new();
             triangles = new();
+            gizmos = new();
         }
     }
     
-    public static Tuple<List<Vector3>, List<int>> Generate(Tree tree, int branchRingResolution) {
+    public static Tuple<List<Vector3>, List<int>, List<GizmoData>> Generate(Tree tree, int branchRingResolution) {
         TreeMeshGeneratorState state = new(tree, branchRingResolution);
 
         // Recursive branch generation algorithm
         GenerateBranch(state, tree.trunk, null, null);
         
-        return new(state.vertices, state.triangles);
+        return new(state.vertices, state.triangles, state.gizmos);
     }
 
     static void GenerateBranch(TreeMeshGeneratorState state, TreeBranch branch, TreeMeshNode branchBase, PlaneOrthoBasis previousBasis) {
@@ -51,7 +55,7 @@ public static class TreeMeshGenerator {
             List<TreeBranch> branches = branch.GetSideBranchesAt(nodeIndex);
             (TreeNode n, Vector3 nNormal) = branch.GetNode(nodeIndex);
             PlaneOrthoBasis nBasis = MeshUtility.PlaneOrthoBasis(nNormal);
-            if (previousBasis != null) nBasis = MeshUtility.PlaneOrthoBasis(nNormal, previousBasis.v1);
+            if (previousBasis != null) nBasis = MeshUtility.PlaneOrthoBasis(nNormal, previousBasis.v1, previousBasis.v2);
 
             foreach (TreeBranch b in branches) {
                 // Side branches cannot occur at node 0; this would be either in the soil, 
@@ -75,7 +79,8 @@ public static class TreeMeshGenerator {
                 // Find the polygon (square) at the base of the side branch
                 // and map this into the upper and lower planes on the main branch
                 Vector3 lineDir = right.position - left.position;
-                PlaneOrthoBasis nPrimeBasis = MeshUtility.PlaneOrthoBasis(nPrimeNormal, lineDir);
+                Vector3 upDir = left.neighbourUp.position - left.position;
+                PlaneOrthoBasis nPrimeBasis = MeshUtility.PlaneOrthoBasis(nPrimeNormal, lineDir, upDir);
                 List<Vector3> preProjectionPoints = MeshUtility.ConstructRegularPolygon(nPrimeBasis, nPrime.position,
                                                                                 nPrime.width, BRANCH_BASE_RESOLUTION);
                 
@@ -84,20 +89,25 @@ public static class TreeMeshGenerator {
 
                 // centre, p0 & p2 are projected onto the line between left and right
                 Vector3 centre = MeshUtility.ProjectOntoLine(nPrime.position, lineDir, left.position);
-                Vector3 p0 = MeshUtility.ProjectOntoLine(preProjectionPoints[0], lineDir, left.position);
-                Vector3 p2 = MeshUtility.ProjectOntoLine(preProjectionPoints[2], lineDir, left.position);
+                Vector3 p1 = MeshUtility.ProjectOntoLine(preProjectionPoints[1], lineDir, left.position);
+                Vector3 p3 = MeshUtility.ProjectOntoLine(preProjectionPoints[3], lineDir, left.position);
 
                 // p1 is projected onto the plane that passes through left, right, and left.neighbourUp.
                 // left.neighbourUp is guaranteed to exist since we assumed this is not the terminal bud.
                 Vector3 upNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourUp.position);
-                Vector3 p1 = MeshUtility.ProjectOntoPlane(preProjectionPoints[1], upNormal, left.position);
+                Vector3 p0 = MeshUtility.ProjectOntoPlane(preProjectionPoints[0], upNormal, left.position);
 
                 // Similar process for p3; we already assumed that left.neighbourDown exists
                 Vector3 downNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourDown.position);
-                Vector3 p3 = MeshUtility.ProjectOntoPlane(preProjectionPoints[3], downNormal, left.position);
+                Vector3 p2 = MeshUtility.ProjectOntoPlane(preProjectionPoints[2], downNormal, left.position);
 
                 // Update the intermediate mesh node between left and right
-                left.neighbourRight.ConfirmBranch(state, centre, p0, p1, p2, p3);
+                left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
+
+                // state.gizmos.Add(new(p0, preProjectionPoints[0], Color.red));
+                // state.gizmos.Add(new(p1, preProjectionPoints[1], Color.green));
+                // state.gizmos.Add(new(p2, preProjectionPoints[2], Color.blue));
+                // state.gizmos.Add(new(p3, preProjectionPoints[3], Color.white));
 
                 // Recurse on the branch
                 GenerateBranch(state, b, left.neighbourRight, nPrimeBasis);
@@ -189,7 +199,7 @@ public static class TreeMeshGenerator {
             int v1 = indices[tri];
             int v2 = indices[tri + 1];
 
-            // Indices may be equal, since some nodes could be simple, so their vertices are equal
+            // Indices will sometimes be equal due to simple nodes (they only have one vertex)
             if (v0 == v1 || v0 == v2 || v1 == v2) continue;
 
             AddTriangle(state, v0, v1, v2);
@@ -208,10 +218,10 @@ public static class TreeMeshGenerator {
 
         // For the right half of the shape, we construct triangles in a similar fashion to the left side.
 
-        int p0 = branchBase.vertexRight;
-        int p1 = branchBase.vertexUp;
-        int p2 = branchBase.vertexLeft;
-        int p3 = branchBase.vertexDown;
+        int p0 = branchBase.vertexUp;
+        int p1 = branchBase.vertexLeft;
+        int p2 = branchBase.vertexDown;
+        int p3 = branchBase.vertexRight;
 
         TreeMeshNodeRing ring0 = branchMeshStructure[0];
         int n = ring0.Resolution();
@@ -227,10 +237,10 @@ public static class TreeMeshGenerator {
             if (i < leftMax) leftIndices.Add(vert.neighbourRight.vertexDown);
         }
 
-        leftIndices.Prepend(p0);
-        leftIndices.Append(p2);
+        leftIndices.Insert(0, p1);
+        leftIndices.Add(p3);
 
-        for (int tri = 0 ; tri < leftIndices.Count - 1 ; tri += 1) AddTriangle(state, p1, leftIndices[tri], leftIndices[tri + 1]);
+        for (int tri = 0 ; tri < leftIndices.Count - 1 ; tri += 1) AddTriangle(state, p2, leftIndices[tri], leftIndices[tri + 1]);
 
         // Right side
         List<int> rightIndices = new();
@@ -242,10 +252,10 @@ public static class TreeMeshGenerator {
             if (i < n) leftIndices.Add(vert.neighbourRight.vertexDown);
         }
 
-        rightIndices.Prepend(p2);
-        rightIndices.Append(p0);
+        rightIndices.Insert(0, p3);
+        rightIndices.Add(p1);
 
-        for (int tri = 0 ; tri < rightIndices.Count - 1 ; tri += 1) AddTriangle(state, p3, rightIndices[tri], rightIndices[tri + 1]);
+        for (int tri = 0 ; tri < rightIndices.Count - 1 ; tri += 1) AddTriangle(state, p0, rightIndices[tri], rightIndices[tri + 1]);
 
 
         // If n is odd, add middle triangles for p2
@@ -329,7 +339,7 @@ public static class TreeMeshGenerator {
 
             // Find the vertex positions
             PlaneOrthoBasis basis = MeshUtility.PlaneOrthoBasis(normal);
-            if (previousBasis != null) basis = MeshUtility.PlaneOrthoBasis(normal, previousBasis.v1);
+            if (previousBasis != null) basis = MeshUtility.PlaneOrthoBasis(normal, previousBasis.v1, previousBasis.v2);
             List<Vector3> vertexPositions = MeshUtility.ConstructRegularPolygon(basis, node.position, node.width, resolution);
 
             // Create the polygon vertex mesh nodes
@@ -384,4 +394,16 @@ public static class TreeMeshGenerator {
         }
     }
 
+}
+
+public class GizmoData {
+    public Vector3 start;
+    public Vector3 end;
+    public Color col;
+
+    public GizmoData(Vector3 start, Vector3 end, Color col) {
+        this.start = start;
+        this.end = end;
+        this.col = col;
+    }
 }

@@ -4,6 +4,8 @@ using UnityEngine;
 
 public static class MeshUtility {
 
+    const float EPSILON = 0.025f;
+
     /// <summary>
     /// Find the normal for the plane through a, b, and c.
     /// Assumes a, b, c are not contained in a line.
@@ -19,15 +21,15 @@ public static class MeshUtility {
     /// (so that it's a subspace, not an *affine* subspace)
     /// </summary>
     public static PlaneOrthoBasis PlaneOrthoBasis(Vector3 normal) {
-        return PlaneOrthoBasis(normal, Vector3.zero);
+        return PlaneOrthoBasis(normal, Vector3.zero, Vector3.zero);
     }
 
     /// <summary>
     /// Finds an orthonormal basis for a plane with this normal, and attempts to include 
     /// attemptBasisInclusion as the first vector of this basis.
     /// </summary>
-    public static PlaneOrthoBasis PlaneOrthoBasis(Vector3 normal, Vector3 attemptBasisInclusion) {
-        Vector3[] standardBasis = { attemptBasisInclusion, new(1, 0, 0), new(0, 1, 0), new(0, 0, 1) };
+    public static PlaneOrthoBasis PlaneOrthoBasis(Vector3 normal, Vector3 include1, Vector3 include2) {
+        Vector3[] standardBasis = { include1, include2, new(1, 0, 0), new(0, 1, 0), new(0, 0, 1) };
         Vector3[] crossVectors = new Vector3[standardBasis.Length];
 
         for (int i = 0 ; i < standardBasis.Length ; i += 1) crossVectors[i] = Vector3.Cross(standardBasis[i], normal);
@@ -36,7 +38,7 @@ public static class MeshUtility {
         Vector3 b2 = Vector3.zero;
         
         foreach (Vector3 v in crossVectors) {
-            if (Mathf.Approximately(v.magnitude, 0)) continue;
+            if (Approximately(v.magnitude, 0)) continue;
 
             b1 = v.normalized;
             b2 = Vector3.Cross(v, normal).normalized;
@@ -99,6 +101,10 @@ public static class MeshUtility {
         return 2 * Mathf.PI - Mathf.Acos(rcosx / r);
     }
 
+    public static bool Approximately(float a, float b) {
+        return Mathf.Abs(a - b) < EPSILON;
+    }
+
 }
 
 public class PlaneOrthoBasis {
@@ -106,9 +112,9 @@ public class PlaneOrthoBasis {
     public Vector3 v2 { get; private set; }
 
     public PlaneOrthoBasis(Vector3 v1, Vector3 v2) {
-        Assert.IsTrue(Mathf.Approximately(v1.magnitude, 1));
-        Assert.IsTrue(Mathf.Approximately(v2.magnitude, 1));
-        Assert.IsTrue(Mathf.Approximately(Vector3.Dot(v1, v2), 0));
+        Assert.IsTrue(MeshUtility.Approximately(v1.magnitude, 1));
+        Assert.IsTrue(MeshUtility.Approximately(v2.magnitude, 1));
+        Assert.IsTrue(MeshUtility.Approximately(Vector3.Dot(v1, v2), 0));
 
         this.v1 = v1.normalized;
         this.v2 = v2.normalized;
