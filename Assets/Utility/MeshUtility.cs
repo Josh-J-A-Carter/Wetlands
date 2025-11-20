@@ -1,28 +1,116 @@
 using System.Collections.Generic;
+using NUnit.Framework;
 using UnityEngine;
 
 public static class MeshUtility {
+
+    /// <summary>
+    /// Find the normal for the plane through a, b, and c.
+    /// Assumes a, b, c are not contained in a line.
+    /// </summary>
+    public static Vector3 ComputePlaneNormal(Vector3 a, Vector3 b, Vector3 c) {
+        Vector3 v1 = a - b;
+        Vector3 v2 = a - c;
+        return Vector3.Cross(v1, v2).normalized;
+    }
     
     /// <summary>
     /// Finds a basis for the plane with this normal, which goes through the origin
     /// (so that it's a subspace, not an *affine* subspace)
     /// </summary>
-    public static Vector3[] FindPlaneBasis(Vector3 normal) {
-        Vector3[] standardBasis = { new(1, 0, 0), new(0, 1, 0), new(0, 0, 1) };
-        Vector3[] crossVectors = new Vector3[3];
-        for (int i = 0 ; i < 3 ; i += 1) crossVectors[i] = Vector3.Cross(standardBasis[i], normal);
+    public static PlaneOrthoBasis PlaneOrthoBasis(Vector3 normal) {
+        return PlaneOrthoBasis(normal, Vector3.zero);
+    }
 
-        Vector3[] subspaceBasis = new Vector3[2];
+    /// <summary>
+    /// Finds an orthonormal basis for a plane with this normal, and attempts to include 
+    /// attemptBasisInclusion as the first vector of this basis.
+    /// </summary>
+    public static PlaneOrthoBasis PlaneOrthoBasis(Vector3 normal, Vector3 attemptBasisInclusion) {
+        Vector3[] standardBasis = { attemptBasisInclusion, new(1, 0, 0), new(0, 1, 0), new(0, 0, 1) };
+        Vector3[] crossVectors = new Vector3[standardBasis.Length];
 
+        for (int i = 0 ; i < standardBasis.Length ; i += 1) crossVectors[i] = Vector3.Cross(standardBasis[i], normal);
+
+        Vector3 b1 = Vector3.zero;
+        Vector3 b2 = Vector3.zero;
+        
         foreach (Vector3 v in crossVectors) {
-            if (v == Vector3.zero) continue;
+            if (Mathf.Approximately(v.magnitude, 0)) continue;
 
-            subspaceBasis[0] = v;
-            subspaceBasis[1] = Vector3.Cross(v, normal);
+            b1 = v.normalized;
+            b2 = Vector3.Cross(v, normal).normalized;
             break;
         }
 
-        return subspaceBasis;
+        return new(b1, b2);
     }
 
+    // <summary> Find the angle that p makes in a circle in the plane with basis orthoBasis and origin at centre </summary>
+    public static float PolygonVertexToAngle(Vector3 p, PlaneOrthoBasis basis, Vector3 centre) {
+        // Translate to origin, so that p = rcos(t) * v1 + rsin(t) * v2;
+        Vector3 pPrime = p - centre;
+        // ==> rcos(t) = p * v1, rsin(t) = p * v2
+        float rcost = Vector3.Dot(pPrime, basis.v1);
+        float rsint = Vector3.Dot(pPrime, basis.v2);
+
+        return InvertCircle(rcost, rsint);
+    }
+
+    public static List<Vector3> ConstructRegularPolygon(PlaneOrthoBasis basis, Vector3 centre, float width, int resolution) {
+        int n = resolution;
+
+        List<Vector3> vertices = new();
+        float deltaTheta = 2 * Mathf.PI / n;
+
+        for (int i = 0 ; i < n ; i += 1) {
+            // Consider the n-gon in the xy plane
+            float theta = deltaTheta * i;
+            Vector3 v = new(Mathf.Cos(theta), Mathf.Sin(theta), 0);
+            // Linear transformation of (1, 0, 0) --> v1, (0, 1, 0) --> v2
+            Vector3 vTransformed = v.x * basis.v1 + v.y * basis.v2;
+            // Ensure correct length of vectors (it should be on the circle with radius = width)
+            vTransformed = vTransformed.normalized * width;
+            // Displacement
+            Vector3 vTranslated = vTransformed + centre;
+            vertices.Add(vTranslated);
+        }
+
+        return vertices;
+    }
+
+    /// <summary>
+    /// Project the vector p onto the line that has direction d and passes through x.
+    /// </summary>
+    public static Vector3 ProjectOntoLine(Vector3 p, Vector3 d, Vector3 x) {
+        return x + (Vector3.Dot(p - x, d) / Vector3.Dot(d, d)) * d;
+    }
+
+    /// <summary>
+    /// Project the vector p onto the plane that has (unit) normal n and passes through x
+    /// </summary>
+    public static Vector3 ProjectOntoPlane(Vector3 p, Vector3 n, Vector3 x) {
+        return p - Vector3.Dot(p - x, n) * n;
+    }
+
+    public static float InvertCircle(float rcosx, float rsinx) {
+        float r = Mathf.Sqrt(rcosx * rcosx + rsinx + rsinx);
+        if (rsinx >= 0) return Mathf.Acos(rcosx / r);
+        return 2 * Mathf.PI - Mathf.Acos(rcosx / r);
+    }
+
+}
+
+public class PlaneOrthoBasis {
+    public Vector3 v1 { get; private set; }
+    public Vector3 v2 { get; private set; }
+
+    public PlaneOrthoBasis(Vector3 v1, Vector3 v2) {
+        Assert.IsTrue(Mathf.Approximately(v1.magnitude, 1));
+        Assert.IsTrue(Mathf.Approximately(v2.magnitude, 1));
+        Assert.IsTrue(Mathf.Approximately(Vector3.Dot(v1, v2), 0));
+
+        this.v1 = v1.normalized;
+        this.v2 = v2.normalized;
+    }
 }
