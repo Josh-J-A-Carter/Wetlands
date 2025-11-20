@@ -94,7 +94,7 @@ public static class MeshUtility {
     }
 
     public static float InvertCircle(float rcosx, float rsinx) {
-        float r = Mathf.Sqrt(rcosx * rcosx + rsinx + rsinx);
+        float r = Mathf.Sqrt(rcosx * rcosx + rsinx * rsinx);
         if (rsinx >= 0) return Mathf.Acos(rcosx / r);
         return 2 * Mathf.PI - Mathf.Acos(rcosx / r);
     }

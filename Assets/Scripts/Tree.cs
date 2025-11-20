@@ -18,10 +18,10 @@ public class Tree : MonoBehaviour {
             new(new(0, 1, 0), 0.75f),
             new(new(0, 2, 0), 0.5f),
             new(new(0, 3, 0), 0.25f)
-    }, new(new(0, 4, 0), 0.2f), new(0, 1.0f, 0));
+        }, new(new(0, 4, 0), 0.2f), new(0, 1.0f, 0));
 
         TreeBranch sidebranch = new();
-        trunk.TestAddNodes(new() {
+        sidebranch.TestAddNodes(new() {
             new(new(0.5f, 2, 0), 0.25f),
             new(new(1.0f, 2.5f, 0), 0.2f),
             new(new(1.5f, 3.0f, 0), 0.15f)
@@ -33,9 +33,9 @@ public class Tree : MonoBehaviour {
         mesh = new();
         GetComponent<MeshFilter>().mesh = mesh;
 
-        Tuple<List<Vector3>, List<int>> output = TreeMeshGenerator.Generate(this, 4);
-        mesh.vertices = output.Item1.ToArray();
-        mesh.triangles = output.Item2.ToArray();
+        (List<Vector3> vertices, List<int> triangles) = TreeMeshGenerator.Generate(this, 4);
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
 
         mesh.RecalculateNormals();
     }

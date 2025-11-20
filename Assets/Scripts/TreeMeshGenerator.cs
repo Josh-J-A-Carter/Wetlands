@@ -40,8 +40,6 @@ public static class TreeMeshGenerator {
             // Otherwise, the connections between branches could become twisted
         List<TreeMeshNodeRing> branchMeshStructure = BranchMeshStructure(state, branch, previousBasis);
 
-        Debug.Log(branchMeshStructure.Count);
-
         // Resolve side branches, and recursively generate their mesh
 
         // 
@@ -106,18 +104,16 @@ public static class TreeMeshGenerator {
             }
         }
 
-
         // Confirm any remaining indeterminate mesh nodes as simple nodes
         foreach (TreeMeshNodeRing r in branchMeshStructure) {
             TreeMeshNode initial = r.GetPolygonNode(0);
             TreeMeshNode current = initial;
 
             do {
-                current.ConfirmSimple(state);
+                if (current.type == TreeMeshNodeType.Indeterminate) current.ConfirmSimple(state);
                 current = current.neighbourRight;
             } while (current != initial);
         }
-
 
         // Create triangles
 
@@ -140,14 +136,26 @@ public static class TreeMeshGenerator {
             do {
                 ConnectMeshNodePanel(state, n00, n10, n01, n11);
 
+                // Move around this current ring
                 n00 = n01;
                 n10 = n11;
                 n01 = n01.neighbourRight;
                 n11 = n11.neighbourRight;
             } while (n00 != initial);
+
+            // Move up one ring
+            n00 = n00.neighbourUp;
+            n10 = n00.neighbourUp;
+            n01 = n00.neighbourRight;
+            n11 = n01.neighbourUp;
         }
 
         // 3. Close up the top
+
+        // 
+        // TO DO
+        // 
+
     }
 
     static List<TreeMeshNodeRing> BranchMeshStructure(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {
