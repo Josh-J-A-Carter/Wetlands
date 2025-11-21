@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.Assertions;
+using System.Linq;
 
 public static class TreeMeshGenerator {
 
@@ -43,12 +44,6 @@ public static class TreeMeshGenerator {
         List<TreeMeshNodeRing> branchMeshStructure = BranchMeshStructure(state, branch, previousBasis);
 
         // Resolve side branches, and recursively generate their mesh
-
-        // 
-        // TO DO: Allow branches to supersede polygon vertex TreeMeshNodes
-        // The projections become more complicated as there are four planes to consider
-        // 
-
         for (int nodeIndex = 0 ; nodeIndex < branch.NodeCount() ; nodeIndex += 1) {
             List<TreeBranch> branches = branch.GetSideBranchesAt(nodeIndex);
             (TreeNode n, Vector3 nNormal) = branch.GetNode(nodeIndex);
@@ -64,11 +59,6 @@ public static class TreeMeshGenerator {
 
                 (TreeMeshNode attachmentNode, PlaneOrthoBasis nPrimeBasis) = 
                         CalculateSideBranchAttachment(state, sideBranch, branchMeshStructure[nodeIndex], n, nBasis);
-
-                // state.gizmos.Add(new(p0, preProjectionPoints[0], Color.red));
-                // state.gizmos.Add(new(p1, preProjectionPoints[1], Color.green));
-                // state.gizmos.Add(new(p2, preProjectionPoints[2], Color.blue));
-                // state.gizmos.Add(new(p3, preProjectionPoints[3], Color.white));
 
                 // Recurse on the branch
                 GenerateBranch(state, sideBranch, attachmentNode, nPrimeBasis);
@@ -89,7 +79,6 @@ public static class TreeMeshGenerator {
         // Create triangles
 
         // 1. Connect branchBase to branchMeshStructure (if branchBase exists)
-
         if (branchBase != null) ConnectSideBranch(state, branchBase, branchMeshStructure);
 
         // 2. Main connections
@@ -122,15 +111,45 @@ public static class TreeMeshGenerator {
         }
 
         // 3. Close up the top
-
-        // 
-        // TO DO
-        // 
-
+        ConnectTerminalRing(state, branchMeshStructure.Last());
     }
+
+    static void ConnectTerminalRing(TreeMeshGeneratorState state, TreeMeshNodeRing terminalRing) {
+        // First, connect all the intermediate nodes in this ring together; we can connect them all to the same intermediate node
+        int v0 = terminalRing.GetPolygonNode(0).neighbourRight.vertexUp;
+
+        List<int> intermediateVertices = new();
+        for (int i = 0 ; i < terminalRing.Resolution() ; i += 1) {
+            intermediateVertices.Add(terminalRing.GetPolygonNode(i).neighbourRight.vertexUp);
+        }
+
+        for (int tri = 0 ; tri < terminalRing.Resolution() - 1 ; tri += 1) {
+            int v1 = intermediateVertices[tri + 1];
+            int v2 = intermediateVertices[tri];
+            AddTriangle(state, v0, v1, v2);
+        }
+
+        // Now, connect each main polygon vertex to the intermediate ones directly to the left and right.
+        for (int i = 0 ; i < terminalRing.Resolution() ; i += 1) {
+            TreeMeshNode n = terminalRing.GetPolygonNode(i);
+            v0 = n.vertexUp;
+            int v1 = n.neighbourLeft.vertexUp;
+            int v2 = n.neighbourRight.vertexUp;
+            AddTriangle(state, v0, v1, v2);
+        }
+    }
+
 
     static Tuple<TreeMeshNode, PlaneOrthoBasis> CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeBranch sideBranch,
                         TreeMeshNodeRing attachmentRing, TreeNode attachmentNode, PlaneOrthoBasis attachmentBasis) {
+
+
+        // 
+        // TO DO: Allow branches to supersede polygon vertex TreeMeshNodes
+        // The projections become more complicated as there are four planes to consider
+        // 
+
+
         // Determine which mesh nodes to insert this between
         (TreeNode nPrime, Vector3 nPrimeNormal) = sideBranch.GetNode(0);
         float theta = MeshUtility.PolygonVertexToAngle(nPrime.position, attachmentBasis, attachmentNode.position);
@@ -170,6 +189,7 @@ public static class TreeMeshGenerator {
 
         // Update the intermediate mesh node between left and right
         left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
+
         return new(left.neighbourRight, nPrimeBasis);
     }
 
