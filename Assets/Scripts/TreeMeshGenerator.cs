@@ -2,8 +2,6 @@ using System;
 using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.Assertions;
-using System.Linq;
-using UnityEditor.ShaderGraph.Internal;
 
 public static class TreeMeshGenerator {
 
@@ -57,52 +55,15 @@ public static class TreeMeshGenerator {
             PlaneOrthoBasis nBasis = MeshUtility.PlaneOrthoBasis(nNormal);
             if (previousBasis != null) nBasis = MeshUtility.PlaneOrthoBasis(nNormal, previousBasis.v1, previousBasis.v2);
 
-            foreach (TreeBranch b in branches) {
+            foreach (TreeBranch sideBranch in branches) {
                 // Side branches cannot occur at node 0; this would be either in the soil, 
                 // or at the connection point of two branches.
                 // Similarly, branches do not occur at the terminal bud, i.e. index branch.NodeCount() - 1.
                 Assert.IsTrue(nodeIndex != 0);
                 Assert.IsTrue(nodeIndex != branch.NodeCount() - 1);
 
-                // Determine which mesh nodes to insert this between
-                (TreeNode nPrime, Vector3 nPrimeNormal) = b.GetNode(0);
-                float theta = MeshUtility.PolygonVertexToAngle(nPrime.position, nBasis, n.position);
-
-                // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
-                // i =< theta * n / (2 * PI) =< i + 1
-                // So i = floor(theta * n / (2 * PI))
-                int vertexIndex = Mathf.FloorToInt(theta * b.NodeCount() / (2 * Mathf.PI));
-
-                TreeMeshNode left = branchMeshStructure[nodeIndex].GetPolygonNode(vertexIndex);
-                TreeMeshNode right = branchMeshStructure[nodeIndex].GetPolygonNode(vertexIndex + 1);
-
-                // Find the polygon (square) at the base of the side branch
-                // and map this into the upper and lower planes on the main branch
-                Vector3 lineDir = right.position - left.position;
-                Vector3 upDir = left.neighbourUp.position - left.position;
-                PlaneOrthoBasis nPrimeBasis = MeshUtility.PlaneOrthoBasis(nPrimeNormal, lineDir, upDir);
-                List<Vector3> preProjectionPoints = MeshUtility.ConstructRegularPolygon(nPrimeBasis, nPrime.position,
-                                                                                nPrime.width, BRANCH_BASE_RESOLUTION);
-                
-                // Assume that the base resolution is 4, for the purposes of the following code.
-                Assert.IsTrue(BRANCH_BASE_RESOLUTION == 4);
-
-                // centre, p0 & p2 are projected onto the line between left and right
-                Vector3 centre = MeshUtility.ProjectOntoLine(nPrime.position, lineDir, left.position);
-                Vector3 p1 = MeshUtility.ProjectOntoLine(preProjectionPoints[1], lineDir, left.position);
-                Vector3 p3 = MeshUtility.ProjectOntoLine(preProjectionPoints[3], lineDir, left.position);
-
-                // p1 is projected onto the plane that passes through left, right, and left.neighbourUp.
-                // left.neighbourUp is guaranteed to exist since we assumed this is not the terminal bud.
-                Vector3 upNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourUp.position);
-                Vector3 p0 = MeshUtility.ProjectOntoPlane(preProjectionPoints[0], upNormal, left.position);
-
-                // Similar process for p3; we already assumed that left.neighbourDown exists
-                Vector3 downNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourDown.position);
-                Vector3 p2 = MeshUtility.ProjectOntoPlane(preProjectionPoints[2], downNormal, left.position);
-
-                // Update the intermediate mesh node between left and right
-                left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
+                (TreeMeshNode attachmentNode, PlaneOrthoBasis nPrimeBasis) = 
+                        CalculateSideBranchAttachment(state, sideBranch, branchMeshStructure[nodeIndex], n, nBasis);
 
                 // state.gizmos.Add(new(p0, preProjectionPoints[0], Color.red));
                 // state.gizmos.Add(new(p1, preProjectionPoints[1], Color.green));
@@ -110,7 +71,7 @@ public static class TreeMeshGenerator {
                 // state.gizmos.Add(new(p3, preProjectionPoints[3], Color.white));
 
                 // Recurse on the branch
-                GenerateBranch(state, b, left.neighbourRight, nPrimeBasis);
+                GenerateBranch(state, sideBranch, attachmentNode, nPrimeBasis);
             }
         }
 
@@ -166,6 +127,50 @@ public static class TreeMeshGenerator {
         // TO DO
         // 
 
+    }
+
+    static Tuple<TreeMeshNode, PlaneOrthoBasis> CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeBranch sideBranch,
+                        TreeMeshNodeRing attachmentRing, TreeNode attachmentNode, PlaneOrthoBasis attachmentBasis) {
+        // Determine which mesh nodes to insert this between
+        (TreeNode nPrime, Vector3 nPrimeNormal) = sideBranch.GetNode(0);
+        float theta = MeshUtility.PolygonVertexToAngle(nPrime.position, attachmentBasis, attachmentNode.position);
+
+        // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
+        // i =< theta * n / (2 * PI) =< i + 1
+        // So i = floor(theta * n / (2 * PI))
+        int vertexIndex = Mathf.FloorToInt(theta * sideBranch.NodeCount() / (2 * Mathf.PI));
+
+        TreeMeshNode left = attachmentRing.GetPolygonNode(vertexIndex);
+        TreeMeshNode right = attachmentRing.GetPolygonNode(vertexIndex + 1);
+
+        // Find the polygon (square) at the base of the side branch
+        // and map this into the upper and lower planes on the main branch
+        Vector3 lineDir = right.position - left.position;
+        Vector3 upDir = left.neighbourUp.position - left.position;
+        PlaneOrthoBasis nPrimeBasis = MeshUtility.PlaneOrthoBasis(nPrimeNormal, lineDir, upDir);
+        List<Vector3> preProjectionPoints = MeshUtility.ConstructRegularPolygon(nPrimeBasis, nPrime.position,
+                                                                        nPrime.width, BRANCH_BASE_RESOLUTION);
+        
+        // Assume that the base resolution is 4, for the purposes of the following code.
+        Assert.IsTrue(BRANCH_BASE_RESOLUTION == 4);
+
+        // centre, p0 & p2 are projected onto the line between left and right
+        Vector3 centre = MeshUtility.ProjectOntoLine(nPrime.position, lineDir, left.position);
+        Vector3 p1 = MeshUtility.ProjectOntoLine(preProjectionPoints[1], lineDir, left.position);
+        Vector3 p3 = MeshUtility.ProjectOntoLine(preProjectionPoints[3], lineDir, left.position);
+
+        // p1 is projected onto the plane that passes through left, right, and left.neighbourUp.
+        // left.neighbourUp is guaranteed to exist since we assumed this is not the terminal bud.
+        Vector3 upNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourUp.position);
+        Vector3 p0 = MeshUtility.ProjectOntoPlane(preProjectionPoints[0], upNormal, left.position);
+
+        // Similar process for p3; we already assumed that left.neighbourDown exists
+        Vector3 downNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourDown.position);
+        Vector3 p2 = MeshUtility.ProjectOntoPlane(preProjectionPoints[2], downNormal, left.position);
+
+        // Update the intermediate mesh node between left and right
+        left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
+        return new(left.neighbourRight, nPrimeBasis);
     }
 
     static List<TreeMeshNodeRing> BranchMeshStructure(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {

@@ -26,10 +26,10 @@ public class Tree : MonoBehaviour {
 
         TreeBranch sidebranch = new();
         sidebranch.TestAddNodes(new() {
-            new(new(1.25f, 2, 1.25f), 0.25f),
-            new(new(1.75f, 2.5f, 1.75f), 0.2f),
-            new(new(2.25f, 3.0f, 2.25f), 0.15f)
-        }, new(new(2.75f, 3.5f, 2.75f), 0.1f), new(1.0f, 1.0f, 0));
+            new(new(-1.1f, 2.0f, 1.1f), 0.25f),
+            new(new(-1.75f, 4.0f, 1.75f), 0.2f),
+            new(new(-2.25f, 5.5f, 2.25f), 0.15f)
+        }, new(new(-2.75f, 7.0f, 2.75f), 0.1f), new(-1.0f, 3.0f, 1.0f));
 
         trunk.TestAddBranch(sidebranch, 1);
         
