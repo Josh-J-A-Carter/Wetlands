@@ -26,8 +26,8 @@ public class Tree : MonoBehaviour {
 
         TreeBranch sidebranch = new();
         sidebranch.TestAddNodes(new() {
-            new(new(-1.1f, 2.0f, 1.1f), 0.25f),
-            new(new(-1.75f, 4.0f, 1.75f), 0.2f),
+            new(new(-1.3f, 2.5f, 1.3f), 0.25f),
+            new(new(-1.85f, 4.0f, 1.85f), 0.2f),
             new(new(-2.25f, 5.5f, 2.25f), 0.15f)
         }, new(new(-2.75f, 7.0f, 2.75f), 0.1f), new(-1.0f, 3.0f, 1.0f));
 
@@ -37,7 +37,7 @@ public class Tree : MonoBehaviour {
         mesh = new();
         GetComponent<MeshFilter>().mesh = mesh;
 
-        (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, 4);
+        (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, 8);
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
         this.gizmos = gizmos;
