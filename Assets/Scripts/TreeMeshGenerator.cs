@@ -143,13 +143,6 @@ public static class TreeMeshGenerator {
     static Tuple<TreeMeshNode, PlaneOrthoBasis> CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeBranch sideBranch,
                         TreeMeshNodeRing attachmentRing, TreeNode attachmentNode, PlaneOrthoBasis attachmentBasis) {
 
-
-        // 
-        // TO DO: Allow branches to supersede polygon vertex TreeMeshNodes
-        // The projections become more complicated as there are four planes to consider
-        // 
-
-
         // Determine which mesh nodes to insert this between
         (TreeNode nPrime, Vector3 nPrimeNormal) = sideBranch.GetNode(0);
         float theta = MeshUtility.PolygonVertexToAngle(nPrime.position, attachmentBasis, attachmentNode.position);
@@ -174,9 +167,15 @@ public static class TreeMeshGenerator {
         Assert.IsTrue(BRANCH_BASE_RESOLUTION == 4);
 
         // centre, p0 & p2 are projected onto the line between left and right
-        Vector3 centre = MeshUtility.ProjectOntoLine(nPrime.position, lineDir, left.position);
-        Vector3 pl = MeshUtility.ProjectOntoLine(preProjection[1], lineDir, left.position);
-        Vector3 pr = MeshUtility.ProjectOntoLine(preProjection[3], lineDir, left.position);
+        // Don't clamp, so we can see where pl and pr *would* end up on the line;
+        // we want to detect if they go off either end of the line!
+        Vector3 centre = MeshUtility.ObliqueProjToLine(nPrime.position, nPrimeNormal, left.position, right.position);
+        Vector3 pl = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.position, right.position, clamp: false);
+        Vector3 pr = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, left.position, right.position, clamp: false);
+
+        state.gizmos.Add(new(pl, Vector3.zero, Color.red));
+        state.gizmos.Add(new(centre, Vector3.zero, Color.green));
+        state.gizmos.Add(new(pr, Vector3.zero, Color.blue));
 
         // Determine where on this line segment the branch should go, i.e. is it in the middle, or on a corner?
         // If pl is before 'left' on the line, then 'left' is the node that should become a branch.
@@ -190,15 +189,16 @@ public static class TreeMeshGenerator {
         float tr = Vector3.Dot(pr - l, r - l) / Vector3.Dot(r - l, r - l);
 
         if (tl < 0) {
+            Debug.Log("Case one - corner left");
             // p1 lies on the line between left and left.neighbourLeft, while p3 coincides with pr.
-            Vector3 p1 = MeshUtility.ProjectOntoLine(preProjection[1], left.position - left.neighbourLeft.position, left.position);
+            Vector3 p1 = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.neighbourLeft.position, left.position);
             Vector3 p3 = pr;
 
             // For simplicity, we place p0 on the line between left and left.neighbourUp, and 
             //                          p2 on the line between left and left.neighbourDown
 
-            Vector3 p0 = MeshUtility.ProjectOntoLine(preProjection[0], left.neighbourUp.position - left.position, left.position);
-            Vector3 p2 = MeshUtility.ProjectOntoLine(preProjection[2], left.position - left.neighbourDown.position, left.position);
+            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, left.position, left.neighbourUp.position);
+            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, left.neighbourDown.position, left.position);
 
             // The 'left' node becomes the branch
             left.ConfirmBranch(state, centre, p0, p2, p1, p3);
@@ -207,15 +207,16 @@ public static class TreeMeshGenerator {
         }
 
         else if (tr > 1) {
+            Debug.Log("Case two - corner right");
             // p3 lies on the line between right and right.neighbourRight, while p1 coincides with pl.
             Vector3 p1 = pl;
-            Vector3 p3 = MeshUtility.ProjectOntoLine(preProjection[3], right.neighbourRight.position - right.position, right.position);
+            Vector3 p3 = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, right.neighbourRight.position, right.position);
 
             // For simplicity, we place p0 on the line between right and right.neighbourUp, and 
             //                          p2 on the line between right and right.neighbourDown
 
-            Vector3 p0 = MeshUtility.ProjectOntoLine(preProjection[0], right.neighbourUp.position - right.position, right.position);
-            Vector3 p2 = MeshUtility.ProjectOntoLine(preProjection[2], right.position - right.neighbourDown.position, right.position);
+            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, right.position, right.neighbourUp.position);
+            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, right.neighbourDown.position, right.position);
 
             // The 'right' node becomes the branch
             right.ConfirmBranch(state, centre, p0, p2, p1, p3);
@@ -224,18 +225,27 @@ public static class TreeMeshGenerator {
         }
 
         else {
+            Debug.Log("Case three - intermediate");
             // pl and pr coincide with p1 and p3 due to all being on the same line segment
             Vector3 p1 = pl;
             Vector3 p3 = pr;
 
+            // Find the line along which to project p0
+            Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
+            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
+
+            // Find the line along which to project p2
+            Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
+            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centreDown, centre);
+
             // p1 is projected onto the plane that passes through left, right, and left.neighbourUp.
             // left.neighbourUp is guaranteed to exist since we assumed this is not the terminal bud.
-            Vector3 upNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourUp.position);
-            Vector3 p0 = MeshUtility.ProjectOntoPlane(preProjection[0], upNormal, left.position);
+            // Vector3 upNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourUp.position);
+            // Vector3 p0 = MeshUtility.OrthoProjToPlane(preProjection[0], upNormal, left.position);
 
             // Similar process for p3; we already assumed that left.neighbourDown exists
-            Vector3 downNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourDown.position);
-            Vector3 p2 = MeshUtility.ProjectOntoPlane(preProjection[2], downNormal, left.position);
+            // Vector3 downNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourDown.position);
+            // Vector3 p2 = MeshUtility.OrthoProjToPlane(preProjection[2], downNormal, left.position);
 
             // Update the intermediate mesh node between left and right
             left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);

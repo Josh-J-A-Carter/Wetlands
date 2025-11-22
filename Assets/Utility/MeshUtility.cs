@@ -1,10 +1,11 @@
+using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
 public static class MeshUtility {
 
-    const float EPSILON = 0.025f;
+    const float EPSILON = 0.005f;
 
     /// <summary>
     /// Find the normal for the plane through a, b, and c.
@@ -84,15 +85,38 @@ public static class MeshUtility {
     /// <summary>
     /// Project the vector p onto the line that has direction d and passes through x.
     /// </summary>
-    public static Vector3 ProjectOntoLine(Vector3 p, Vector3 d, Vector3 x) {
+    public static Vector3 OrthoProjToLine(Vector3 p, Vector3 d, Vector3 x) {
         return x + (Vector3.Dot(p - x, d) / Vector3.Dot(d, d)) * d;
     }
 
     /// <summary>
     /// Project the vector p onto the plane that has (unit) normal n and passes through x
     /// </summary>
-    public static Vector3 ProjectOntoPlane(Vector3 p, Vector3 n, Vector3 x) {
+    public static Vector3 OrthoProjToPlane(Vector3 p, Vector3 n, Vector3 x) {
         return p - Vector3.Dot(p - x, n) * n;
+    }
+
+    /// <summary>
+    /// Project p onto the line between x1 and x2, at pPrime = x1 + t (x2 - x1)
+    /// so that (p - pPrime) and (x2 - x1) have the same angle as d and x2 - x1.
+    /// Optional tMin and tMax to clamp the allowed t-values for pPrime; default to 0 and 1.
+    /// </summary>
+    public static Vector3 ObliqueProjToLine(Vector3 p, Vector3 d, Vector3 x1, Vector3 x2, float tMin = 0, float tMax = 1, bool clamp = true) {
+        Vector3 a = x1 - p;
+        Vector3 b = x2 - x1;
+        Vector3 g = d.normalized;
+        float ab = Vector3.Dot(a, b);
+        float bb = Vector3.Dot(b, b);
+        float gb = Vector3.Dot(g, b);
+        Func<float, float> f = (t) => ab*ab + 2*t*ab*bb + t*t*bb*bb - gb*gb*Vector3.Dot(a+t*b,a+t*b);
+        Func<float, float> fPrime = (t) => 2*ab*bb + 2*t*bb*bb - 2*gb*gb*(ab + t*bb);
+
+        float t = FindRoot(0.5f, f, fPrime);
+
+        if (clamp && t < tMin) t = tMin;
+        if (clamp && t > tMax) t = tMax;
+
+        return x1 + t * (x2 - x1);
     }
 
     public static float InvertCircle(float rcosx, float rsinx) {
@@ -105,6 +129,22 @@ public static class MeshUtility {
         return Mathf.Abs(a - b) < EPSILON;
     }
 
+    /// <summary>
+    /// Newton's root finding method
+    /// </summary>
+    public static float FindRoot(float x0, Func<float, float> f, Func<float, float> fPrime) {
+        float xk = x0;
+        int iter = 0;
+
+        while (!Approximately(f(xk), 0.0f)) {
+            xk -= f(xk) / fPrime(xk);
+
+            iter += 1;
+            Assert.IsTrue(iter < 100, "Root finding algorithm took too long");
+        }
+
+        return xk;
+    }
 }
 
 public class PlaneOrthoBasis {
@@ -112,9 +152,9 @@ public class PlaneOrthoBasis {
     public Vector3 v2 { get; private set; }
 
     public PlaneOrthoBasis(Vector3 v1, Vector3 v2) {
-        Assert.IsTrue(MeshUtility.Approximately(v1.magnitude, 1));
-        Assert.IsTrue(MeshUtility.Approximately(v2.magnitude, 1));
-        Assert.IsTrue(MeshUtility.Approximately(Vector3.Dot(v1, v2), 0));
+        Assert.IsTrue(MeshUtility.Approximately(v1.magnitude, 1), "Basis vector magnitude != 1");
+        Assert.IsTrue(MeshUtility.Approximately(v2.magnitude, 1), "Basis vector magnitude != 1");
+        Assert.IsTrue(MeshUtility.Approximately(Vector3.Dot(v1, v2), 0), "Basis vectors are not orthogonal");
 
         this.v1 = v1.normalized;
         this.v2 = v2.normalized;
