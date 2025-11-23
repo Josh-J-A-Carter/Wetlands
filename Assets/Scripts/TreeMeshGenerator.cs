@@ -173,10 +173,6 @@ public static class TreeMeshGenerator {
         Vector3 pl = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.position, right.position, clamp: false);
         Vector3 pr = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, left.position, right.position, clamp: false);
 
-        state.gizmos.Add(new(pl, Vector3.zero, Color.red));
-        state.gizmos.Add(new(centre, Vector3.zero, Color.green));
-        state.gizmos.Add(new(pr, Vector3.zero, Color.blue));
-
         // Determine where on this line segment the branch should go, i.e. is it in the middle, or on a corner?
         // If pl is before 'left' on the line, then 'left' is the node that should become a branch.
         // If pr is after 'right' on the line, then 'right' is the node that should become a branch
@@ -237,15 +233,6 @@ public static class TreeMeshGenerator {
             // Find the line along which to project p2
             Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
             Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centreDown, centre);
-
-            // p1 is projected onto the plane that passes through left, right, and left.neighbourUp.
-            // left.neighbourUp is guaranteed to exist since we assumed this is not the terminal bud.
-            // Vector3 upNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourUp.position);
-            // Vector3 p0 = MeshUtility.OrthoProjToPlane(preProjection[0], upNormal, left.position);
-
-            // Similar process for p3; we already assumed that left.neighbourDown exists
-            // Vector3 downNormal = MeshUtility.ComputePlaneNormal(left.position, right.position, left.neighbourDown.position);
-            // Vector3 p2 = MeshUtility.OrthoProjToPlane(preProjection[2], downNormal, left.position);
 
             // Update the intermediate mesh node between left and right
             left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);

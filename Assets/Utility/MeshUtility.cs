@@ -101,7 +101,7 @@ public static class MeshUtility {
     /// so that (p - pPrime) and (x2 - x1) have the same angle as d and x2 - x1.
     /// Optional tMin and tMax to clamp the allowed t-values for pPrime; default to 0 and 1.
     /// </summary>
-    public static Vector3 ObliqueProjToLine(Vector3 p, Vector3 d, Vector3 x1, Vector3 x2, float tMin = 0, float tMax = 1, bool clamp = true) {
+    public static Vector3 ObliqueProjToLine(Vector3 p, Vector3 d, Vector3 x1, Vector3 x2, float tMin = 0, float tMax = 1, bool clamp = true, bool verbose = false) {
         Vector3 a = x1 - p;
         Vector3 b = x2 - x1;
         Vector3 g = d.normalized;
@@ -111,7 +111,16 @@ public static class MeshUtility {
         Func<float, float> f = (t) => ab*ab + 2*t*ab*bb + t*t*bb*bb - gb*gb*Vector3.Dot(a+t*b,a+t*b);
         Func<float, float> fPrime = (t) => 2*ab*bb + 2*t*bb*bb - 2*gb*gb*(ab + t*bb);
 
-        float t = FindRoot(0.5f, f, fPrime);
+        // Need to be careful where we seed this algorithm, because there are TWO possible solutions on x2 - x1
+        // Seeding 0 every time may result in issues - to be confirmed
+        float t = FindRoot(0.0f, f, fPrime);
+
+        if (verbose) {
+            Debug.Log("Verbose");
+            Debug.Log("Raw t: " + t);
+            Vector3 pP = x1 + t * (x2 - x1);
+            Debug.Log("Dot comparison: original " + Vector3.Dot(x2 - x1, g) + ", new " + (Vector3.Dot(x2 - x1, pP - p) / (pP - p).magnitude));
+        }
 
         if (clamp && t < tMin) t = tMin;
         if (clamp && t > tMax) t = tMax;
