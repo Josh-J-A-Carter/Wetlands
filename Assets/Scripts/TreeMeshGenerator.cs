@@ -232,8 +232,8 @@ public static class TreeMeshGenerator {
 
             // Find the line along which to project p2
             Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centreDown, centre);
-
+            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
+            
             // Update the intermediate mesh node between left and right
             left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
 

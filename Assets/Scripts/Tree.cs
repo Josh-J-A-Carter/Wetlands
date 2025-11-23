@@ -37,7 +37,7 @@ public class Tree : MonoBehaviour {
         mesh = new();
         GetComponent<MeshFilter>().mesh = mesh;
 
-        (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, 8);
+        (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, 4);
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
         this.gizmos = gizmos;

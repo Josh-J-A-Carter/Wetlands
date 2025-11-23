@@ -105,21 +105,38 @@ public static class MeshUtility {
         Vector3 a = x1 - p;
         Vector3 b = x2 - x1;
         Vector3 g = d.normalized;
+
+        float aa = Vector3.Dot(a, a);
         float ab = Vector3.Dot(a, b);
         float bb = Vector3.Dot(b, b);
         float gb = Vector3.Dot(g, b);
-        Func<float, float> f = (t) => ab*ab + 2*t*ab*bb + t*t*bb*bb - gb*gb*Vector3.Dot(a+t*b,a+t*b);
-        Func<float, float> fPrime = (t) => 2*ab*bb + 2*t*bb*bb - 2*gb*gb*(ab + t*bb);
 
-        // Need to be careful where we seed this algorithm, because there are TWO possible solutions on x2 - x1
-        // Seeding 0 every time may result in issues - to be confirmed
-        float t = FindRoot(0.0f, f, fPrime);
+        float A = bb*bb - gb*gb*bb;
+        float B = 2*ab*bb - 2*gb*gb*ab;
+        float C = ab*ab - gb*gb*aa;
+
+        (float t1, float t2) = SolveQuadratic(A, B, C, float.NaN);
+
+        if (float.IsNaN(t1)) {
+            Func<float, float> f = (t) => ab*ab + 2*t*ab*bb + t*t*bb*bb - gb*gb*Vector3.Dot(a+t*b,a+t*b);
+            Func<float, float> fPrime = (t) => 2*ab*bb + 2*t*bb*bb - 2*gb*gb*(ab + t*bb);
+            t1 = FindRoot(0.0f, f, fPrime);
+            t2 = FindRoot(1.0f, f, fPrime);;
+        }
+
+        Vector3 p1 = x1 + t1 * (x2 - x1);
+        Vector3 p2 = x1 + t2 * (x2 - x1);
+
+        float res1 = Mathf.Abs(1 - Vector3.Dot(p - p1, g) / (p - p1).magnitude);
+        float res2 = Mathf.Abs(1 - Vector3.Dot(p - p2, g) / (p - p2).magnitude);
+
+        float t = t1;
+        if (res1 > res2) t = t2;
 
         if (verbose) {
-            Debug.Log("Verbose");
-            Debug.Log("Raw t: " + t);
-            Vector3 pP = x1 + t * (x2 - x1);
-            Debug.Log("Dot comparison: original " + Vector3.Dot(x2 - x1, g) + ", new " + (Vector3.Dot(x2 - x1, pP - p) / (pP - p).magnitude));
+            Debug.Log("Oblique line projection - verbose");
+            Debug.Log("t1 " + t1 + ", res1: " + res1);
+            Debug.Log("t2 " + t2 + ", res2: " + res2);
         }
 
         if (clamp && t < tMin) t = tMin;
@@ -149,10 +166,19 @@ public static class MeshUtility {
             xk -= f(xk) / fPrime(xk);
 
             iter += 1;
-            Assert.IsTrue(iter < 100, "Root finding algorithm took too long");
+            Assert.IsTrue(iter < 100, "Root finding algorithm took too long: iter " + iter + ", xk " + xk + ", res " + f(xk));
         }
 
         return xk;
+    }
+
+    public static Tuple<float, float> SolveQuadratic(float a, float b, float c, float defaultVal) {
+        float D = b*b - 4*a*c;
+        if (D < 0) return new(defaultVal, defaultVal);
+
+        float sqrt = Mathf.Sqrt(D);
+
+        return new((-b-sqrt)/(2*a),(-b+sqrt)/(2*a));
     }
 }
 
