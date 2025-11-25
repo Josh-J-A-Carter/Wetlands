@@ -408,6 +408,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e23f6be8c99db042a697e3ff756ff8e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  currentParameters:
+    apicalDominance: 0.5
+    growthSpeed: 1
+    widthToLenGrowthRatio: 0.01
+    internodeLength: 0.5
 --- !u!23 &1660255557
 MeshRenderer:
   m_ObjectHideFlags: 0
