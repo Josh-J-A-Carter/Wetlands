@@ -185,15 +185,24 @@ public static class TreeMeshGenerator {
         float tr = Vector3.Dot(pr - l, r - l) / Vector3.Dot(r - l, r - l);
 
         if (tl < 0) {
+            Debug.Log("Place Left");
             // p1 lies on the line between left and left.neighbourLeft, while p3 coincides with pr.
             Vector3 p1 = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.neighbourLeft.position, left.position);
             Vector3 p3 = pr;
 
-            // For simplicity, we place p0 on the line between left and left.neighbourUp, and 
-            //                          p2 on the line between left and left.neighbourDown
+            // Find the line along which to project p0
+            Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
+            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
 
-            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, left.position, left.neighbourUp.position);
-            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, left.neighbourDown.position, left.position);
+            // Find the line along which to project p2
+            Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
+            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
+
+            state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+            state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
+            state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
+            state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
+
 
             // The 'left' node becomes the branch
             left.ConfirmBranch(state, centre, p0, p2, p1, p3);
@@ -202,15 +211,24 @@ public static class TreeMeshGenerator {
         }
 
         else if (tr > 1) {
+            Debug.Log("Place Right");
             // p3 lies on the line between right and right.neighbourRight, while p1 coincides with pl.
             Vector3 p1 = pl;
             Vector3 p3 = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, right.neighbourRight.position, right.position);
 
-            // For simplicity, we place p0 on the line between right and right.neighbourUp, and 
-            //                          p2 on the line between right and right.neighbourDown
+            // Find the line along which to project p0
+            Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
+            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
 
-            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, right.position, right.neighbourUp.position);
-            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, right.neighbourDown.position, right.position);
+            // Find the line along which to project p2
+            Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
+            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
+
+            state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+            state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
+            state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
+            state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
+
 
             // The 'right' node becomes the branch
             right.ConfirmBranch(state, centre, p0, p2, p1, p3);
@@ -219,6 +237,7 @@ public static class TreeMeshGenerator {
         }
 
         else {
+            Debug.Log("Place Middle");
             // pl and pr coincide with p1 and p3 due to all being on the same line segment
             Vector3 p1 = pl;
             Vector3 p3 = pr;
@@ -230,6 +249,12 @@ public static class TreeMeshGenerator {
             // Find the line along which to project p2
             Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
             Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
+
+            state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+            state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
+            state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
+            state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
+
             
             // Update the intermediate mesh node between left and right
             left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);

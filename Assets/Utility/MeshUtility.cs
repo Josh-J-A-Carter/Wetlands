@@ -119,10 +119,11 @@ public static class MeshUtility {
         (float t1, float t2) = SolveQuadratic(A, B, C, float.NaN);
 
         if (float.IsNaN(t1)) {
+            Debug.Log("Warning: NaN when solving quadratic.");
             Func<float, float> f = (t) => ab*ab + 2*t*ab*bb + t*t*bb*bb - gb*gb*Vector3.Dot(a+t*b,a+t*b);
             Func<float, float> fPrime = (t) => 2*ab*bb + 2*t*bb*bb - 2*gb*gb*(ab + t*bb);
             t1 = FindRoot(0.0f, f, fPrime);
-            t2 = FindRoot(1.0f, f, fPrime);;
+            t2 = FindRoot(1.0f, f, fPrime);
         }
 
         Vector3 p1 = x1 + t1 * (x2 - x1);
@@ -175,6 +176,9 @@ public static class MeshUtility {
 
     public static Tuple<float, float> SolveQuadratic(float a, float b, float c, float defaultVal) {
         float D = b*b - 4*a*c;
+
+        if (Approximately(D, 0)) return new(-b/(2*a), -b/(2*a));
+        
         if (D < 0) return new(defaultVal, defaultVal);
 
         float sqrt = Mathf.Sqrt(D);
