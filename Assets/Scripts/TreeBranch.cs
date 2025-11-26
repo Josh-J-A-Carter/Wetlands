@@ -10,7 +10,7 @@ public class TreeBranch {
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
     
-    public int depth { get; private set; }
+    int depth;
 
     TreeNode terminus;
     Vector3 terminusDirection;
@@ -37,17 +37,8 @@ public class TreeBranch {
         terminusDirection = direction.normalized;
         terminus = new(startPos + terminusDirection * START_LENGTH, START_WIDTH);
 
-        phyllotaxyBasis = MeshUtility.PlaneOrthoBasis(terminusDirection);
-    }
-
-    public void TestAddNodes(List<TreeNode> nodes, TreeNode terminus, Vector3 dir) {
-        this.terminus = terminus;
-        terminusDirection = dir;
-        this.nodes.AddRange(nodes);
-    }
-
-    public void TestAddBranch(TreeBranch b, int nodeIndex) {
-        sideBranches.Add(new(nodeIndex, b));
+        // Include some random variation for each branch to make it look more natural
+        phyllotaxyBasis = MeshUtility.PlaneOrthoBasis(terminusDirection, MeshUtility.RandomVector(), Vector3.zero);
     }
 
     // Get the index'th node in the branch, as well as its direction of growth.

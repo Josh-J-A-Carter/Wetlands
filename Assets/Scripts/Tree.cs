@@ -38,10 +38,10 @@ public class Tree : MonoBehaviour {
 
             if (g.end != Vector3.zero) {
                 Gizmos.DrawLine(g.start, g.end);
-                Gizmos.DrawSphere(g.end, 0.05f);
+                Gizmos.DrawSphere(g.end, 0.01f);
             }
 
-            else Gizmos.DrawSphere(g.start, 0.05f);
+            else Gizmos.DrawSphere(g.start, 0.01f);
         }
     }
 
@@ -52,6 +52,7 @@ public class Tree : MonoBehaviour {
             float light = 1.0f;
 
             // Growth
+            this.gizmos = new();
             trunk.Grow(light, Vector3.zero, currentParameters);
 
             // Recursively add new side branches
@@ -60,7 +61,7 @@ public class Tree : MonoBehaviour {
             (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, 4);
             mesh.vertices = vertices.ToArray();
             mesh.triangles = triangles.ToArray();
-            this.gizmos = gizmos;
+            this.gizmos.AddRange(gizmos);
 
             mesh.RecalculateNormals();
 

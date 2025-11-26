@@ -150,7 +150,7 @@ public static class TreeMeshGenerator {
         // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
         // i =< theta * n / (2 * PI) =< i + 1
         // So i = floor(theta * n / (2 * PI))
-        int vertexIndex = Mathf.FloorToInt(theta * sideBranch.NodeCount() / (2 * Mathf.PI));
+        int vertexIndex = Mathf.FloorToInt(theta * attachmentRing.Resolution() / (2 * Mathf.PI));
 
         TreeMeshNode left = attachmentRing.GetPolygonNode(vertexIndex);
         TreeMeshNode right = attachmentRing.GetPolygonNode(vertexIndex + 1);
@@ -185,7 +185,6 @@ public static class TreeMeshGenerator {
         float tr = Vector3.Dot(pr - l, r - l) / Vector3.Dot(r - l, r - l);
 
         if (tl < 0) {
-            Debug.Log("Case one - corner left");
             // p1 lies on the line between left and left.neighbourLeft, while p3 coincides with pr.
             Vector3 p1 = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.neighbourLeft.position, left.position);
             Vector3 p3 = pr;
@@ -203,7 +202,6 @@ public static class TreeMeshGenerator {
         }
 
         else if (tr > 1) {
-            Debug.Log("Case two - corner right");
             // p3 lies on the line between right and right.neighbourRight, while p1 coincides with pl.
             Vector3 p1 = pl;
             Vector3 p3 = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, right.neighbourRight.position, right.position);
@@ -221,7 +219,6 @@ public static class TreeMeshGenerator {
         }
 
         else {
-            Debug.Log("Case three - intermediate");
             // pl and pr coincide with p1 and p3 due to all being on the same line segment
             Vector3 p1 = pl;
             Vector3 p3 = pr;

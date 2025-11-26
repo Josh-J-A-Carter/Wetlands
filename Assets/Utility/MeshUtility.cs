@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public static class MeshUtility {
 
@@ -179,6 +180,16 @@ public static class MeshUtility {
         float sqrt = Mathf.Sqrt(D);
 
         return new((-b-sqrt)/(2*a),(-b+sqrt)/(2*a));
+    }
+
+    public static Vector3 RandomVector() {
+        const float PI = Mathf.PI;
+        // Using a surface patch instead of picking a random vector and scaling
+        // because that would not have a uniform distribution
+        float theta = Random.Range(-PI / 2, PI / 2);
+        float phi = Random.Range(0, 2 * PI);
+
+        return new(Mathf.Cos(theta)*Mathf.Cos(phi), Mathf.Cos(theta)*Mathf.Sin(phi), Mathf.Sin(theta));
     }
 }
 
