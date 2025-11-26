@@ -19,24 +19,7 @@ public class Tree : MonoBehaviour {
     Mesh mesh;
 
     public void Start() {
-        trunk = new();
-        // trunk.TestAddNodes(new() {
-        //     new(Vector3.zero, 2.0f),
-        //     new(new(0, 2, 0), 1.5f),
-        // //     new(new(0, 4, 0), 1.0f),
-        // //     new(new(0, 6, 0), 0.5f)
-        // // }, new(new(0, 8, 0), 0.25f), new(0, 1.0f, 0));
-        // }, new(new(0, 6, 0), 0.5f), new(0, 1.0f, 0));
-
-
-        // TreeBranch sidebranch = new();
-        // sidebranch.TestAddNodes(new() {
-        //     new(new(-1.3f, 2.5f, 1.3f), 0.25f),
-        //     new(new(-1.85f, 4.0f, 1.85f), 0.2f),
-        //     new(new(-2.25f, 5.5f, 2.25f), 0.15f)
-        // }, new(new(-2.75f, 7.0f, 2.75f), 0.1f), new(-1.0f, 3.0f, 1.0f));
-
-        // trunk.TestAddBranch(sidebranch, 1);
+        trunk = new(Vector3.zero, Vector3.up, 0);
         
         // Make the mesh
         mesh = new();
@@ -98,8 +81,20 @@ public class TreeParameters {
     public float growthSpeed = 1.0f;
 
     [SerializeField]
+    public float branchingAngle = Mathf.PI / 4;
+
+    [SerializeField]
     public float widthToLenGrowthRatio = 0.05f;
 
     [SerializeField]
     public float internodeLength = 0.5f;
+
+    [SerializeField]
+    public Phyllotaxy phyllotaxy = Phyllotaxy.Opposite;
+
+    public enum Phyllotaxy {
+        Opposite,
+        Alternate,
+        Whorled
+    }
 }

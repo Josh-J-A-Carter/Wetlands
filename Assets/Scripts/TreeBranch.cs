@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class TreeBranch {
+
+    const float START_WIDTH = 0.001f;
+    const float START_LENGTH = 0.001f;
     
     public int depth { get; private set; }
 
@@ -13,17 +17,27 @@ public class TreeBranch {
 
     List<TreeNode> nodes;
 
-    public List<Tuple<int, TreeBranch>> sideBranches { get; private set; }
-    public List<Tuple<int, Vector3>> inactiveBuds { get; private set; }
+    List<Tuple<int, TreeBranch>> sideBranches;
+    List<Tuple<int, Vector3>> inactiveBuds;
 
-    public TreeBranch() {
+    PlaneOrthoBasis phyllotaxyBasis;
+    // Keep track of where we are in the leaf arrangement cycle,
+    // i.e. what the previous leaf placement was
+    int phyllotaxyState;
+
+    public TreeBranch(Vector3 startPos, Vector3 direction, int depth) {
         nodes = new();
         sideBranches = new();
         inactiveBuds = new();
 
-        nodes.Add(new(Vector3.zero, 0.001f));
-        terminus = new(new(0, 0.001f, 0), 0.001f);
-        terminusDirection = Vector3.up;
+        this.depth = depth;
+
+        nodes.Add(new(startPos, START_WIDTH));
+
+        terminusDirection = direction.normalized;
+        terminus = new(startPos + terminusDirection * START_LENGTH, START_WIDTH);
+
+        phyllotaxyBasis = MeshUtility.PlaneOrthoBasis(terminusDirection);
     }
 
     public void TestAddNodes(List<TreeNode> nodes, TreeNode terminus, Vector3 dir) {
@@ -102,13 +116,83 @@ public class TreeBranch {
             terminus = newTerminus;
             terminusDirection = newTerminusDirection;
 
-            // 
             //  Create new buds
-            // 
+            CreateBuds(param, nodes.Count - 1);
 
-            // 
             //  Destroy old buds
+            DestroyBuds(param, nodes.Count - 4);
+        }
+
+        // Decide to grow a new branch or not
+        float chance = Random.Range(0.0f, 1.0f);
+        if (chance < SideBranchChance(param) && inactiveBuds.Count > 0) {
+            // Get the inactive bud with the lowest index
+            int arrayIndex = 0;
+            foreach ((int i, Vector3 d) in inactiveBuds) if (i < inactiveBuds[arrayIndex].Item1) { arrayIndex = i; }
+            (int nodeIndex, Vector3 dir) = inactiveBuds[arrayIndex];
+
+            // Need to find the starting position of the side branch;
+            // This parent branch has a non-zero width!
+            (TreeNode parentNode, Vector3 stemDir) = GetNode(nodeIndex);
+            Vector3 dirInPlane = MeshUtility.OrthoProjToPlane(dir, stemDir, Vector3.zero).normalized;
+            Vector3 startPos = parentNode.position + dirInPlane * parentNode.width;
+
+            TreeBranch sideBranch = new(startPos, dir, depth + 1);
+            sideBranches.Add(new(nodeIndex, sideBranch));
+
+            inactiveBuds.RemoveAt(arrayIndex);
+        }
+    }
+
+    private float SideBranchChance(TreeParameters param) {
+        float s = param.growthSpeed;
+        float d = depth;
+        float a = param.apicalDominance;
+        return s * Mathf.Exp(-a * d) / (2 - a) / 1000;
+    }
+
+    private void CreateBuds(TreeParameters param, int nodeIndex) {
+        if (param.phyllotaxy == TreeParameters.Phyllotaxy.Opposite) {
+            // May need to adjust the basis for this node, in case nodes change direction
+            (_, Vector3 stemDir) = GetNode(nodeIndex);
+            PlaneOrthoBasis localBasis = MeshUtility.PlaneOrthoBasis(stemDir, phyllotaxyBasis.v1, phyllotaxyBasis.v2);
+
+            // dir1 and dir2, in opposite directions in the plane
+            Vector3 dir1 = localBasis.v1;
+            Vector3 dir2 = -localBasis.v1;
+
+            // Place dir1 and dir2 so that they respect the branching angle with stemDir,
+            // while remaining in the plane between localBasis.v1 & stemDir
             // 
+            //    v1        -v1
+            // <------- ^ ------->
+            // \__      | s    __/
+            //    \__   |   __/
+            //  b1   \_ | _/   b2
+            // 
+            // where b1 and b2 make the angle branchingAngle with s = stemDir.
+
+            float theta = param.branchingAngle;
+
+            Vector3 b1 = stemDir * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
+            Vector3 b2 = stemDir * Mathf.Cos(theta) + dir2 * Mathf.Sin(theta);
+
+            inactiveBuds.Add(new(nodeIndex, b1.normalized));
+            inactiveBuds.Add(new(nodeIndex, b2.normalized));
+        }
+
+        // phyllotaxyState += 1;
+        // phyllotaxyState %= param.phyllotaxyCycle;
+    }
+
+    private void DestroyBuds(TreeParameters _, int nodeIndex) {
+        if (nodeIndex < 0) return;
+
+        for (int i = 0 ; i < inactiveBuds.Count ; i += 1) {
+            if (inactiveBuds[i].Item1 != nodeIndex) continue;
+
+            inactiveBuds.RemoveAt(i);
+            i -= 1;
         }
     }
 
@@ -116,7 +200,7 @@ public class TreeBranch {
         float s = param.growthSpeed;
         float d = depth;
         float a = param.apicalDominance;
-        return s * (Mathf.Exp(-a * d) / (2 - a)  + 1);
+        return s * (Mathf.Exp(-2 * a * d) / (2 - a) + 1);
     }
 
 }
