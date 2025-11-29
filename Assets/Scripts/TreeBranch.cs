@@ -143,6 +143,32 @@ public class TreeBranch {
     }
 
     private void CreateBuds(TreeParameters param, int nodeIndex) {
+        if (param.phyllotaxy == TreeParameters.Phyllotaxy.Whorled) {
+            // May need to adjust the basis for this node, in case nodes change direction
+            (_, Vector3 stemDir) = GetNode(nodeIndex);
+            PlaneOrthoBasis localBasis = MeshUtility.PlaneOrthoBasis(stemDir, phyllotaxyBasis.v1, phyllotaxyBasis.v2);
+
+            // dir1 and dir2, in opposite directions in the plane
+            Vector3 dir1 = localBasis.v1;
+            Vector3 dir2 = localBasis.v2;
+            Vector3 dir3 = -localBasis.v1;
+            Vector3 dir4 = -localBasis.v2;
+
+            // dir1-4 are just the projections of the desired vectors onto localBasis
+            // Instead, we want an angle theta with the stem direction
+            float theta = param.branchingAngle;
+
+            Vector3 b1 = stemDir * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
+            Vector3 b2 = stemDir * Mathf.Cos(theta) + dir2 * Mathf.Sin(theta);
+            Vector3 b3 = stemDir * Mathf.Cos(theta) + dir3 * Mathf.Sin(theta);
+            Vector3 b4 = stemDir * Mathf.Cos(theta) + dir4 * Mathf.Sin(theta);
+
+            inactiveBuds.Add(new(nodeIndex, b1.normalized));
+            inactiveBuds.Add(new(nodeIndex, b2.normalized));
+            inactiveBuds.Add(new(nodeIndex, b3.normalized));
+            inactiveBuds.Add(new(nodeIndex, b4.normalized));
+        }
+
         if (param.phyllotaxy == TreeParameters.Phyllotaxy.Opposite) {
             // May need to adjust the basis for this node, in case nodes change direction
             (_, Vector3 stemDir) = GetNode(nodeIndex);
@@ -151,6 +177,19 @@ public class TreeBranch {
             // dir1 and dir2, in opposite directions in the plane
             Vector3 dir1 = localBasis.v1;
             Vector3 dir2 = -localBasis.v1;
+
+            // If planar, no op
+            if (param.phyllotaxyAngleCycle == TreeParameters.PhyllotaxyCycle.Planar) {}
+            // If decussate, rotate by 90 degrees
+            if (param.phyllotaxyAngleCycle == TreeParameters.PhyllotaxyCycle.Decussate) {
+                if (phyllotaxyState > 0) {
+                    dir1 = localBasis.v2;
+                    dir2 = -localBasis.v2;
+                }
+                
+                phyllotaxyState += 1;
+                phyllotaxyState %= 2;
+            }
 
             // Place dir1 and dir2 so that they respect the branching angle with stemDir,
             // while remaining in the plane between localBasis.v1 & stemDir
@@ -172,8 +211,38 @@ public class TreeBranch {
             inactiveBuds.Add(new(nodeIndex, b2.normalized));
         }
 
-        // phyllotaxyState += 1;
-        // phyllotaxyState %= param.phyllotaxyCycle;
+        if (param.phyllotaxy == TreeParameters.Phyllotaxy.Alternate) {
+            // May need to adjust the basis for this node, in case nodes change direction
+            (_, Vector3 stemDir) = GetNode(nodeIndex);
+            PlaneOrthoBasis localBasis = MeshUtility.PlaneOrthoBasis(stemDir, phyllotaxyBasis.v1, phyllotaxyBasis.v2);
+
+            // dir1 and dir2, in opposite directions in the plane
+            Vector3 dir1 = localBasis.v1;
+
+            // If planar, alternate branch sides
+            if (param.phyllotaxyAngleCycle == TreeParameters.PhyllotaxyCycle.Planar) {
+                if (phyllotaxyState > 0) dir1 = -localBasis.v1;
+
+                phyllotaxyState += 1;
+                phyllotaxyState %= 2;
+            }
+            
+            // If spiral, rotate by 90 degrees each time
+            if (param.phyllotaxyAngleCycle == TreeParameters.PhyllotaxyCycle.Spiral) {
+                if (phyllotaxyState == 1) dir1 = localBasis.v2;
+                if (phyllotaxyState == 2) dir1 = -localBasis.v1;
+                if (phyllotaxyState == 3) dir1 = -localBasis.v2;
+                
+                phyllotaxyState += 1;
+                phyllotaxyState %= 4;
+            }
+
+            float theta = param.branchingAngle;
+
+            Vector3 b1 = stemDir * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
+
+            inactiveBuds.Add(new(nodeIndex, b1.normalized));
+        }
     }
 
     private void DestroyBuds(TreeParameters _, int nodeIndex) {
@@ -191,7 +260,7 @@ public class TreeBranch {
         float s = param.growthSpeed;
         float d = depth;
         float a = param.apicalDominance;
-        return s * (Mathf.Exp(-2 * a * d) / (2 - a) + 1);
+        return s * Mathf.Exp(-a * d) * ((3*a + 1) / (a + 1));
     }
 
 }

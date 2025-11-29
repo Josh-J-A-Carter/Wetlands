@@ -118,13 +118,7 @@ public static class MeshUtility {
 
         (float t1, float t2) = SolveQuadratic(A, B, C, float.NaN);
 
-        if (float.IsNaN(t1)) {
-            Debug.Log("Warning: NaN when solving quadratic.");
-            Func<float, float> f = (t) => ab*ab + 2*t*ab*bb + t*t*bb*bb - gb*gb*Vector3.Dot(a+t*b,a+t*b);
-            Func<float, float> fPrime = (t) => 2*ab*bb + 2*t*bb*bb - 2*gb*gb*(ab + t*bb);
-            t1 = FindRoot(0.0f, f, fPrime);
-            t2 = FindRoot(1.0f, f, fPrime);
-        }
+        Assert.IsFalse(float.IsNaN(t1), "Oblique projection to line failed - NaN when solving quadratic");
 
         Vector3 p1 = x1 + t1 * (x2 - x1);
         Vector3 p2 = x1 + t2 * (x2 - x1);

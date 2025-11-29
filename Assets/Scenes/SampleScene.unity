@@ -409,12 +409,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   currentParameters:
-    apicalDominance: 0.5
+    apicalDominance: 1
     growthSpeed: 5
-    branchingAngle: 1.57
+    branchingAngle: 0.78
     widthToLenGrowthRatio: 0.01
     internodeLength: 0.5
     phyllotaxy: 0
+    phyllotaxyAngleCycle: 1
 --- !u!23 &1660255557
 MeshRenderer:
   m_ObjectHideFlags: 0

@@ -93,9 +93,18 @@ public class TreeParameters {
     [SerializeField]
     public Phyllotaxy phyllotaxy = Phyllotaxy.Opposite;
 
+    [SerializeField]
+    public PhyllotaxyCycle phyllotaxyAngleCycle = PhyllotaxyCycle.Planar;
+
     public enum Phyllotaxy {
         Opposite,
         Alternate,
         Whorled
+    }
+
+    public enum PhyllotaxyCycle {
+        Planar,
+        Decussate,
+        Spiral
     }
 }
