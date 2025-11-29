@@ -110,15 +110,16 @@ public static class MeshUtility {
         float aa = Vector3.Dot(a, a);
         float ab = Vector3.Dot(a, b);
         float bb = Vector3.Dot(b, b);
-        float gb = Vector3.Dot(g, b);
+        float bg = Vector3.Dot(b, g);
 
-        float A = bb*bb - gb*gb*bb;
-        float B = 2*ab*bb - 2*gb*gb*ab;
-        float C = ab*ab - gb*gb*aa;
+        float A = bb*bb - bg*bg*bb;
+        float B = 2*ab*bb - 2*bg*bg*ab;
+        float C = ab*ab - bg*bg*aa;
 
         (float t1, float t2) = SolveQuadratic(A, B, C, float.NaN);
 
-        Assert.IsFalse(float.IsNaN(t1), "Oblique projection to line failed - NaN when solving quadratic");
+        // Easiest solution if the quadratic doesn't work out, is to just use an orthogonal projection
+        if (float.IsNaN(t1)) return OrthoProjToLine(p, d, x1);
 
         Vector3 p1 = x1 + t1 * (x2 - x1);
         Vector3 p2 = x1 + t2 * (x2 - x1);
@@ -131,8 +132,8 @@ public static class MeshUtility {
 
         if (verbose) {
             Debug.Log("Oblique line projection - verbose");
-            Debug.Log("t1 " + t1 + ", res1: " + res1);
-            Debug.Log("t2 " + t2 + ", res2: " + res2);
+            Debug.Log("p1 " + p1 + ", t1 " + t1 + ", res1: " + res1);
+            Debug.Log("p2 " + p2 + ", t2 " + t2 + ", res2: " + res2);
         }
 
         if (clamp && t < tMin) t = tMin;
@@ -171,7 +172,7 @@ public static class MeshUtility {
     public static Tuple<float, float> SolveQuadratic(float a, float b, float c, float defaultVal) {
         float D = b*b - 4*a*c;
 
-        if (Approximately(D, 0)) return new(-b/(2*a), -b/(2*a));
+        if (D < 0 && Approximately(D, 0)) return new(-b/(2*a), -b/(2*a));
         
         if (D < 0) return new(defaultVal, defaultVal);
 

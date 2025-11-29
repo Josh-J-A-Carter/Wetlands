@@ -3,6 +3,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.Assertions;
 using System.Linq;
+using Unity.Burst.Intrinsics;
 
 public static class TreeMeshGenerator {
 
@@ -15,9 +16,13 @@ public static class TreeMeshGenerator {
 
         public List<GizmoData> gizmos;
 
-        public int branchRingResolution;
+        /// <summary>
+        /// Given a depth value, what should the corresponding resolution of the mesh be?
+        /// i.e. 4 => square cylinder, 5 => pentagonal cylinder, etc.
+        /// </summary>
+        public Func<int, int> branchRingResolution;
 
-        public TreeMeshGeneratorState(Tree tree, int branchRingResolution) {
+        public TreeMeshGeneratorState(Tree tree, Func<int, int> branchRingResolution) {
             this.tree = tree;
             this.branchRingResolution = branchRingResolution;
 
@@ -27,7 +32,7 @@ public static class TreeMeshGenerator {
         }
     }
     
-    public static Tuple<List<Vector3>, List<int>, List<GizmoData>> Generate(Tree tree, int branchRingResolution) {
+    public static Tuple<List<Vector3>, List<int>, List<GizmoData>> Generate(Tree tree, Func<int, int> branchRingResolution) {
         TreeMeshGeneratorState state = new(tree, branchRingResolution);
 
         // Recursive branch generation algorithm
@@ -267,7 +272,8 @@ public static class TreeMeshGenerator {
         for (int i = 0 ; i < branch.NodeCount() ; i += 1) {
             (TreeNode n, Vector3 direction) = branch.GetNode(i);
 
-            TreeMeshNodeRing ring = new(n, direction, state.branchRingResolution, prev, previousBasis);
+            int res = state.branchRingResolution.Invoke(branch.GetDepth());
+            TreeMeshNodeRing ring = new(n, direction, res, prev, previousBasis);
             rings.Add(ring);
             prev = ring;
         }

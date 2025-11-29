@@ -58,7 +58,7 @@ public class Tree : MonoBehaviour {
             // Recursively add new side branches
 
             // Update the mesh
-            (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, 4);
+            (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, MeshResolutionByDepth);
             mesh.vertices = vertices.ToArray();
             mesh.triangles = triangles.ToArray();
             this.gizmos.AddRange(gizmos);
@@ -69,7 +69,10 @@ public class Tree : MonoBehaviour {
         }
     }
 
-
+    static int MeshResolutionByDepth(int depth) {
+        if (depth <= 1) return 4;
+        return 3;
+    }
 }
 
 

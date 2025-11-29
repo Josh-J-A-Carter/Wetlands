@@ -7,6 +7,8 @@ using Random = UnityEngine.Random;
 
 public class TreeBranch {
 
+    const int TERMINAL_BRANCH_DEPTH = 2;
+
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
     
@@ -39,6 +41,18 @@ public class TreeBranch {
 
         // Include some random variation for each branch to make it look more natural
         phyllotaxyBasis = MeshUtility.PlaneOrthoBasis(terminusDirection, MeshUtility.RandomVector(), Vector3.zero);
+    }
+
+    public int GetDepth() {
+        return depth;
+    }
+
+    public bool IsTerminalBranch() {
+        return depth >= TERMINAL_BRANCH_DEPTH;
+    }
+
+    public bool HasReachedMaxGrowth() {
+        return IsTerminalBranch() && nodes.Count > 1;
     }
 
     // Get the index'th node in the branch, as well as its direction of growth.
@@ -75,15 +89,17 @@ public class TreeBranch {
     }
 
     public void Grow(float light, Vector3 deltaPos, TreeParameters param) {
+        // Apply deltaPos to each node
+        for (int i = 0 ; i < NodeCount() ; i += 1) GetNode(i).Item1.Translate(deltaPos);
+        
+        if (HasReachedMaxGrowth()) return;
+
         float growthVal = GrowthFactor(param) * light;
         float lengthGrowthFactor = growthVal * Tree.GROWTH_TICK_INCR;
         float widthGrowthFactor = param.widthToLenGrowthRatio * growthVal * Tree.GROWTH_TICK_INCR;
 
-        // Apply deltaPos to each (non-terminal) node & enlarge as needed
-        for (int i = 0 ; i < nodes.Count ; i += 1) {
-            nodes[i].Translate(deltaPos);
-            nodes[i].Enlarge(widthGrowthFactor);
-        }
+        // Enlarge each node
+        for (int i = 0 ; i < NodeCount() ; i += 1) GetNode(i).Item1.Enlarge(widthGrowthFactor);
 
         // Recurse on child branches
         foreach ((int offshootIndex, TreeBranch branch) in sideBranches) {
@@ -92,9 +108,8 @@ public class TreeBranch {
             branch.Grow(light, deltaPosPrime, param);
         }
 
-        // Update terminal bud
-        terminus.Enlarge(widthGrowthFactor);
-        terminus.Translate(deltaPos + terminusDirection * lengthGrowthFactor);
+        // Move the terminal bud in its direction of growth
+        terminus.Translate(terminusDirection * lengthGrowthFactor);
 
         float internodeLength = (terminus.position - nodes.Last().position).magnitude;
 
@@ -111,7 +126,7 @@ public class TreeBranch {
             CreateBuds(param, nodes.Count - 1);
 
             //  Destroy old buds
-            DestroyBuds(param, nodes.Count - 4);
+            DestroyBuds(param, nodes.Count - 4); // magic number!!
         }
 
         // Decide to grow a new branch or not
@@ -139,10 +154,13 @@ public class TreeBranch {
         float s = param.growthSpeed;
         float d = depth;
         float a = param.apicalDominance;
+        if (IsTerminalBranch()) return 0; // No more side branches - otherwise performance will die
         return s * Mathf.Exp(-a * d) / (2 - a) / 1000;
     }
 
     private void CreateBuds(TreeParameters param, int nodeIndex) {
+        if (IsTerminalBranch()) return;
+
         if (param.phyllotaxy == TreeParameters.Phyllotaxy.Whorled) {
             // May need to adjust the basis for this node, in case nodes change direction
             (_, Vector3 stemDir) = GetNode(nodeIndex);
@@ -246,6 +264,8 @@ public class TreeBranch {
     }
 
     private void DestroyBuds(TreeParameters _, int nodeIndex) {
+        if (IsTerminalBranch()) return;
+
         if (nodeIndex < 0) return;
 
         for (int i = 0 ; i < inactiveBuds.Count ; i += 1) {
