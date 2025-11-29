@@ -411,7 +411,9 @@ MonoBehaviour:
   currentParameters:
     apicalDominance: 1
     growthSpeed: 25
-    branchingAngle: 0.78
+    minBranchingAngle: 0.75
+    maxBranchingAngle: 0.9
+    maxDirectionChangeAngle: 0.1
     widthToLenGrowthRatio: 0.01
     internodeLength: 0.5
     phyllotaxy: 0

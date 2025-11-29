@@ -115,7 +115,7 @@ public class TreeBranch {
 
         if (internodeLength >= param.internodeLength) {
             TreeNode newTerminus = new(terminus.position, 0.0f);
-            Vector3 newTerminusDirection = terminusDirection.normalized;
+            Vector3 newTerminusDirection = NewTerminusDirection(param);
 
             nodes.Add(terminus);
 
@@ -150,6 +150,15 @@ public class TreeBranch {
         }
     }
 
+    private Vector3 NewTerminusDirection(TreeParameters param) {
+        (float theta, float phi) = MeshUtility.InvertSphere(terminusDirection);
+
+        theta += Random.Range(-param.maxDirectionChangeAngle, param.maxDirectionChangeAngle);
+        phi += Random.Range(-param.maxDirectionChangeAngle, param.maxDirectionChangeAngle);
+
+        return MeshUtility.Sphere(theta, phi);
+    }
+
     private float SideBranchChance(TreeParameters param) {
         float s = param.growthSpeed;
         float d = depth;
@@ -174,12 +183,14 @@ public class TreeBranch {
 
             // dir1-4 are just the projections of the desired vectors onto localBasis
             // Instead, we want an angle theta with the stem direction
-            float theta = param.branchingAngle;
-
-            Vector3 b1 = stemDir * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
-            Vector3 b2 = stemDir * Mathf.Cos(theta) + dir2 * Mathf.Sin(theta);
-            Vector3 b3 = stemDir * Mathf.Cos(theta) + dir3 * Mathf.Sin(theta);
-            Vector3 b4 = stemDir * Mathf.Cos(theta) + dir4 * Mathf.Sin(theta);
+            float theta1 = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
+            float theta2 = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
+            float theta3 = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
+            float theta4 = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
+            Vector3 b1 = stemDir * Mathf.Cos(theta1) + dir1 * Mathf.Sin(theta1);
+            Vector3 b2 = stemDir * Mathf.Cos(theta2) + dir2 * Mathf.Sin(theta2);
+            Vector3 b3 = stemDir * Mathf.Cos(theta3) + dir3 * Mathf.Sin(theta3);
+            Vector3 b4 = stemDir * Mathf.Cos(theta4) + dir4 * Mathf.Sin(theta4);
 
             inactiveBuds.Add(new(nodeIndex, b1.normalized));
             inactiveBuds.Add(new(nodeIndex, b2.normalized));
@@ -219,11 +230,11 @@ public class TreeBranch {
             //  b1   \_ | _/   b2
             // 
             // where b1 and b2 make the angle branchingAngle with s = stemDir.
+            float theta1 = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
+            float theta2 = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
 
-            float theta = param.branchingAngle;
-
-            Vector3 b1 = stemDir * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
-            Vector3 b2 = stemDir * Mathf.Cos(theta) + dir2 * Mathf.Sin(theta);
+            Vector3 b1 = stemDir * Mathf.Cos(theta1) + dir1 * Mathf.Sin(theta1);
+            Vector3 b2 = stemDir * Mathf.Cos(theta2) + dir2 * Mathf.Sin(theta2);
 
             inactiveBuds.Add(new(nodeIndex, b1.normalized));
             inactiveBuds.Add(new(nodeIndex, b2.normalized));
@@ -255,7 +266,7 @@ public class TreeBranch {
                 phyllotaxyState %= 4;
             }
 
-            float theta = param.branchingAngle;
+            float theta = Random.Range(param.minBranchingAngle, param.maxBranchingAngle);
 
             Vector3 b1 = stemDir * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
 

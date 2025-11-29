@@ -183,12 +183,41 @@ public static class MeshUtility {
 
     public static Vector3 RandomVector() {
         const float PI = Mathf.PI;
-        // Using a surface patch instead of picking a random vector and scaling
+        // Using surface patch for a sphere instead of picking a random vector and scaling
         // because that would not have a uniform distribution
         float theta = Random.Range(-PI / 2, PI / 2);
         float phi = Random.Range(0, 2 * PI);
 
-        return new(Mathf.Cos(theta)*Mathf.Cos(phi), Mathf.Cos(theta)*Mathf.Sin(phi), Mathf.Sin(theta));
+        return Sphere(theta, phi);
+    }
+
+    public static Vector3 Sphere(float theta, float phi, float r = 1) {
+        return new(r*Mathf.Cos(theta)*Mathf.Cos(phi), r*Mathf.Cos(theta)*Mathf.Sin(phi), r*Mathf.Sin(theta));
+    }
+
+    /// <summary>
+    /// Obtain angles theta and phi for a given point on the sphere.
+    /// </summary>
+    /// <returns>First theta (-pi/2, pi/2), then phi (0, 2pi).</returns>
+    public static Tuple<float, float> InvertSphere(Vector3 p) {
+        // p = (rcos(theta)cos(phi), rcos(theta)sin(phi), rsin(theta))
+        // ==> (rcos(theta))^2 = x^2 + y^2 ==> rcos(theta) = += sqrt(x^2 + y^2)
+        // As theta is in (-pi/2, pi/2), cos(theta) >= 0 ==> rcos(theta) = sqrt(x^2 + y^2)
+        // 
+        // ==> cos(phi) = rcos(theta)*cos(phi)/rcos(theta) = x / sqrt(x^2 + y^2)
+        // ==> sin(phi) = rcos(theta)*sin(phi)/rcos(theta) = y / sqrt(x^2 + y^2)
+        // 
+        // We have cos(phi), sin(phi), and rcos(theta), sin(theta), so can invert for phi and theta
+        float x = p.x;
+        float y = p.y;
+        float z = p.z;
+
+        float rcostheta = Mathf.Sqrt(x*x + y*y);
+        float rsintheta = z;
+        float cosphi = x / rcostheta;
+        float sinphi = y / rcostheta;
+
+        return new(InvertCircle(rcostheta, rsintheta), InvertCircle(cosphi, sinphi));
     }
 }
 

@@ -85,7 +85,13 @@ public class TreeParameters {
     public float growthSpeed = 1.0f;
 
     [SerializeField]
-    public float branchingAngle = Mathf.PI / 4;
+    public float minBranchingAngle = Mathf.PI / 4;
+
+    [SerializeField]
+    public float maxBranchingAngle = Mathf.PI / 4;
+
+    [SerializeField]
+    public float maxDirectionChangeAngle = Mathf.PI / 32;
 
     [SerializeField]
     public float widthToLenGrowthRatio = 0.05f;
