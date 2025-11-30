@@ -3,15 +3,13 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.Assertions;
 using System.Linq;
-using Unity.Burst.Intrinsics;
 
 public static class TreeMeshGenerator {
-
-    const int BRANCH_BASE_RESOLUTION = 4;
 
     class TreeMeshGeneratorState {
         public Tree tree;
         public List<Vector3> vertices;
+        public List<Vector3> normals;
         public List<int> triangles;
 
         public List<GizmoData> gizmos;
@@ -27,6 +25,7 @@ public static class TreeMeshGenerator {
             this.branchRingResolution = branchRingResolution;
 
             vertices = new();
+            normals = new();
             triangles = new();
             gizmos = new();
         }
@@ -36,12 +35,12 @@ public static class TreeMeshGenerator {
         TreeMeshGeneratorState state = new(tree, branchRingResolution);
 
         // Recursive branch generation algorithm
-        GenerateBranch(state, tree.trunk, null, null);
+        GenerateBranch(state, tree.trunk, null);
         
         return new(state.vertices, state.triangles, state.gizmos);
     }
 
-    static void GenerateBranch(TreeMeshGeneratorState state, TreeBranch branch, TreeMeshNode branchBase, PlaneOrthoBasis previousBasis) {
+    static TreeMeshNodeRing GenerateBranch(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {
 
         // Create the tentative mesh structure
             // If this branch is already a side branch, we need to use its parent's basis to inform this one's
@@ -62,33 +61,18 @@ public static class TreeMeshGenerator {
                 Assert.IsTrue(nodeIndex != 0);
                 Assert.IsTrue(nodeIndex != branch.NodeCount() - 1);
 
-                (TreeMeshNode attachmentNode, PlaneOrthoBasis nPrimeBasis) = 
-                        CalculateSideBranchAttachment(state, sideBranch, branchMeshStructure[nodeIndex], n, nBasis);
-
                 // Recurse on the branch
-                GenerateBranch(state, sideBranch, attachmentNode, nPrimeBasis);
+                TreeMeshNodeRing sideBranchBase = GenerateBranch(state, sideBranch, nBasis);
+
+                // Project side branch base onto 
+                CalculateSideBranchAttachment(state, n, branchMeshStructure[nodeIndex], sideBranchBase, nBasis);
             }
-        }
-
-        // Confirm any remaining indeterminate mesh nodes as simple nodes
-        foreach (TreeMeshNodeRing r in branchMeshStructure) {
-            TreeMeshNode initial = r.GetPolygonNode(0);
-            TreeMeshNode current = initial;
-
-            do {
-                if (current.type == TreeMeshNodeType.Indeterminate) current.ConfirmSimple(state);
-                current = current.neighbourRight;
-            } while (current != initial);
         }
 
         // Create triangles
 
-        // 1. Connect branchBase to branchMeshStructure (if branchBase exists)
-        if (branchBase != null) ConnectSideBranch(state, branchBase, branchMeshStructure);
-
-        // 2. Main connections
         // Moving frame of 4 mesh nodes
-        TreeMeshNode n00 = branchMeshStructure[0].GetPolygonNode(0);
+        TreeMeshNode n00 = branchMeshStructure[0].GetNode(0);
         TreeMeshNode n10 = n00.neighbourUp;
         TreeMeshNode n01 = n00.neighbourRight;
         TreeMeshNode n11 = n01.neighbourUp;
@@ -117,155 +101,154 @@ public static class TreeMeshGenerator {
 
         // 3. Close up the top
         ConnectTerminalRing(state, branchMeshStructure.Last());
+
+        return branchMeshStructure.First();
     }
 
     static void ConnectTerminalRing(TreeMeshGeneratorState state, TreeMeshNodeRing terminalRing) {
-        // First, connect all the intermediate nodes in this ring together; we can connect them all to the same intermediate node
-        int v0 = terminalRing.GetPolygonNode(0).neighbourRight.vertexUp;
-
-        List<int> intermediateVertices = new();
-        for (int i = 0 ; i < terminalRing.Resolution() ; i += 1) {
-            intermediateVertices.Add(terminalRing.GetPolygonNode(i).neighbourRight.vertexUp);
-        }
-
-        for (int tri = 0 ; tri < terminalRing.Resolution() - 1 ; tri += 1) {
-            int v1 = intermediateVertices[tri + 1];
-            int v2 = intermediateVertices[tri];
-            AddTriangle(state, v0, v1, v2);
-        }
-
-        // Now, connect each main polygon vertex to the intermediate ones directly to the left and right.
-        for (int i = 0 ; i < terminalRing.Resolution() ; i += 1) {
-            TreeMeshNode n = terminalRing.GetPolygonNode(i);
-            v0 = n.vertexUp;
-            int v1 = n.neighbourLeft.vertexUp;
-            int v2 = n.neighbourRight.vertexUp;
+        TreeMeshNode n0 = terminalRing.GetNode(0);
+        for (int i = 1 ; i < terminalRing.Resolution() - 1 ; i += 1) {
+            TreeMeshNode n1 = terminalRing.GetNode(i);
+            TreeMeshNode n2 = terminalRing.GetNode(i+1);
+            int v0 = n0.index;
+            int v1 = n1.index;
+            int v2 = n2.index;
             AddTriangle(state, v0, v1, v2);
         }
     }
 
 
-    static Tuple<TreeMeshNode, PlaneOrthoBasis> CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeBranch sideBranch,
-                        TreeMeshNodeRing attachmentRing, TreeNode attachmentNode, PlaneOrthoBasis attachmentBasis) {
+    static void CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeNode parentCentre, 
+            TreeMeshNodeRing parentRing, TreeMeshNodeRing childRing, PlaneOrthoBasis attachmentBasis) {
 
-        // Determine which mesh nodes to insert this between
-        (TreeNode nPrime, Vector3 nPrimeNormal) = sideBranch.GetNode(0);
-        float theta = MeshUtility.PolygonVertexToAngle(nPrime.position, attachmentBasis, attachmentNode.position);
+        for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
+            // Determine which mesh nodes to insert this between
+            TreeMeshNode baseNode = childRing.GetNode(i);
+            float theta = MeshUtility.PolygonVertexToAngle(baseNode.position, attachmentBasis, parentCentre.position);
+            // state.gizmos.Add(new(val * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+            // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
+            // i =< theta * n / (2 * PI) =< i + 1
+            // So i = floor(theta * n / (2 * PI))
+            int vertexIndex = Mathf.FloorToInt(theta * parentRing.Resolution() / (2 * Mathf.PI));
+            
+            TreeMeshNode left = parentRing.GetNode(vertexIndex);
+            TreeMeshNode right = parentRing.GetNode(vertexIndex + 1);
 
-        // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
-        // i =< theta * n / (2 * PI) =< i + 1
-        // So i = floor(theta * n / (2 * PI))
-        int vertexIndex = Mathf.FloorToInt(theta * attachmentRing.Resolution() / (2 * Mathf.PI));
+            // Determine if baseNode occurs above or below the plane in which parentRing's polygon occurs
+            float belowOrAbove = Vector3.Dot(attachmentBasis.normal, baseNode.position - parentCentre.position);
 
-        TreeMeshNode left = attachmentRing.GetPolygonNode(vertexIndex);
-        TreeMeshNode right = attachmentRing.GetPolygonNode(vertexIndex + 1);
+            Vector3 v1 = right.position - left.position;
+            Vector3 v2 = left.neighbourUp.position - left.position;
 
-        // Find the polygon (square) at the base of the side branch
-        // and map this into the upper and lower planes on the main branch
-        Vector3 lineDir = right.position - left.position;
-        Vector3 upDir = left.neighbourUp.position - left.position;
-        PlaneOrthoBasis nPrimeBasis = MeshUtility.PlaneOrthoBasis(nPrimeNormal, lineDir, upDir);
-        List<Vector3> preProjection = MeshUtility.ConstructRegularPolygon(nPrimeBasis, nPrime.position,
-                                                                        nPrime.width, BRANCH_BASE_RESOLUTION);
+            if (belowOrAbove < 0) v2 = left.neighbourDown.position - left.position;                
+
+            Vector3 normal = Vector3.Cross(v1, v2).normalized;
+
+            Vector3 finalPos = MeshUtility.OrthoProjToPlane(baseNode.position, normal, left.position);
+            // state.gizmos.Add(new(finalPos * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+            AdjustVertex(state, baseNode.index, finalPos);
+        }
+
+
+
+        // // Find the polygon at the base of the side branch
+        // // and map this into the upper and lower planes on the main branch
         
-        // Assume that the base resolution is 4, for the purposes of the following code.
-        Assert.IsTrue(BRANCH_BASE_RESOLUTION == 4);
+        // // centre, p0 & p2 are projected onto the line between left and right
+        // // Don't clamp, so we can see where pl and pr *would* end up on the line;
+        // // we want to detect if they go off either end of the line!
+        // Vector3 centre = MeshUtility.ObliqueProjToLine(nPrime.position, nPrimeNormal, left.position, right.position);
+        // Vector3 pl = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.position, right.position, clamp: false);
+        // Vector3 pr = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, left.position, right.position, clamp: false);
 
-        // centre, p0 & p2 are projected onto the line between left and right
-        // Don't clamp, so we can see where pl and pr *would* end up on the line;
-        // we want to detect if they go off either end of the line!
-        Vector3 centre = MeshUtility.ObliqueProjToLine(nPrime.position, nPrimeNormal, left.position, right.position);
-        Vector3 pl = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.position, right.position, clamp: false);
-        Vector3 pr = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, left.position, right.position, clamp: false);
+        // // Determine where on this line segment the branch should go, i.e. is it in the middle, or on a corner?
+        // // If pl is before 'left' on the line, then 'left' is the node that should become a branch.
+        // // If pr is after 'right' on the line, then 'right' is the node that should become a branch
+        //     // ==> This can be tested by solving   p = left + t * (right - left)   for t
+        //     // ==> t = (p - left) . (right - left) / || right - left ||^2
+        //     // If p is inside left and right on the line, then 0 < t < 1. Otherwise, p is before or after.
+        // Vector3 l = left.position;
+        // Vector3 r = right.position;
+        // float tl = Vector3.Dot(pl - l, r - l) / Vector3.Dot(r - l, r - l);
+        // float tr = Vector3.Dot(pr - l, r - l) / Vector3.Dot(r - l, r - l);
 
-        // Determine where on this line segment the branch should go, i.e. is it in the middle, or on a corner?
-        // If pl is before 'left' on the line, then 'left' is the node that should become a branch.
-        // If pr is after 'right' on the line, then 'right' is the node that should become a branch
-            // ==> This can be tested by solving   p = left + t * (right - left)   for t
-            // ==> t = (p - left) . (right - left) / || right - left ||^2
-            // If p is inside left and right on the line, then 0 < t < 1. Otherwise, p is before or after.
-        Vector3 l = left.position;
-        Vector3 r = right.position;
-        float tl = Vector3.Dot(pl - l, r - l) / Vector3.Dot(r - l, r - l);
-        float tr = Vector3.Dot(pr - l, r - l) / Vector3.Dot(r - l, r - l);
+        // if (tl < 0) {
+        //     // p1 lies on the line between left and left.neighbourLeft, while p3 coincides with pr.
+        //     Vector3 p1 = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.neighbourLeft.position, left.position);
+        //     Vector3 p3 = pr;
 
-        if (tl < 0) {
-            // p1 lies on the line between left and left.neighbourLeft, while p3 coincides with pr.
-            Vector3 p1 = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.neighbourLeft.position, left.position);
-            Vector3 p3 = pr;
+        //     // Find the line along which to project p0
+        //     Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
+        //     Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
 
-            // Find the line along which to project p0
-            Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
-            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
+        //     // Find the line along which to project p2
+        //     Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
+        //     Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
 
-            // Find the line along which to project p2
-            Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
-
-            state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
-            state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
-            state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
-            state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
+        //     state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+        //     state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
+        //     state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
+        //     state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
 
 
-            // The 'left' node becomes the branch
-            left.ConfirmBranch(state, centre, p0, p2, p1, p3);
+        //     // The 'left' node becomes the branch
+        //     left.ConfirmBranch(state, centre, p0, p2, p1, p3);
 
-            return new(left, nPrimeBasis);
-        }
+        //     return new(left, nPrimeBasis);
+        // }
 
-        else if (tr > 1) {
-            // p3 lies on the line between right and right.neighbourRight, while p1 coincides with pl.
-            Vector3 p1 = pl;
-            Vector3 p3 = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, right.neighbourRight.position, right.position);
+        // else if (tr > 1) {
+        //     // p3 lies on the line between right and right.neighbourRight, while p1 coincides with pl.
+        //     Vector3 p1 = pl;
+        //     Vector3 p3 = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, right.neighbourRight.position, right.position);
 
-            // Find the line along which to project p0
-            Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
-            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
+        //     // Find the line along which to project p0
+        //     Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
+        //     Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
 
-            // Find the line along which to project p2
-            Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
+        //     // Find the line along which to project p2
+        //     Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
+        //     Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
 
-            state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
-            state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
-            state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
-            state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
+        //     state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+        //     state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
+        //     state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
+        //     state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
 
 
-            // The 'right' node becomes the branch
-            right.ConfirmBranch(state, centre, p0, p2, p1, p3);
+        //     // The 'right' node becomes the branch
+        //     right.ConfirmBranch(state, centre, p0, p2, p1, p3);
             
-            return new(right, nPrimeBasis);
-        }
+        //     return new(right, nPrimeBasis);
+        // }
 
-        else {
-            // pl and pr coincide with p1 and p3 due to all being on the same line segment
-            Vector3 p1 = pl;
-            Vector3 p3 = pr;
+        // else {
+        //     // pl and pr coincide with p1 and p3 due to all being on the same line segment
+        //     Vector3 p1 = pl;
+        //     Vector3 p3 = pr;
 
-            // Find the line along which to project p0
-            Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
-            Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
+        //     // Find the line along which to project p0
+        //     Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
+        //     Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
 
-            // Find the line along which to project p2
-            Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-            Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
+        //     // Find the line along which to project p2
+        //     Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
+        //     Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
 
-            state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
-            state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
-            state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
-            state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
+        //     state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
+        //     state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
+        //     state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
+        //     state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
 
             
-            // Update the intermediate mesh node between left and right
-            left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
+        //     // Update the intermediate mesh node between left and right
+        //     left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
 
-            return new(left.neighbourRight, nPrimeBasis);
-        }
+        //     return new(left.neighbourRight, nPrimeBasis);
+        // }
     }
 
-    static List<TreeMeshNodeRing> BranchMeshStructure(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {
+    static List<TreeMeshNodeRing> BranchMeshStructure(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis basis) {
         List<TreeMeshNodeRing> rings = new();
 
         TreeMeshNodeRing prev = null;
@@ -273,7 +256,7 @@ public static class TreeMeshGenerator {
             (TreeNode n, Vector3 direction) = branch.GetNode(i);
 
             int res = state.branchRingResolution.Invoke(branch.GetDepth());
-            TreeMeshNodeRing ring = new(n, direction, res, prev, previousBasis);
+            TreeMeshNodeRing ring = new(state, n, direction, res, prev, basis);
             rings.Add(ring);
             prev = ring;
         }
@@ -283,93 +266,18 @@ public static class TreeMeshGenerator {
 
     static void ConnectMeshNodePanel(TreeMeshGeneratorState state, TreeMeshNode n00, TreeMeshNode n10,
                                                                     TreeMeshNode n01, TreeMeshNode n11) {
-        
-        List<int> indices = new() {
-            n10.vertexDown, n10.vertexRight, // n10
-            n11.vertexLeft, n11.vertexDown, // n11
-            n01.vertexUp, n01.vertexLeft, // n01
-            n00.vertexRight // back to n00
-        };
-
-
-        for (int tri = 0 ; tri < indices.Count - 1; tri += 1) {
-            int v0 = n00.vertexUp;
-            int v1 = indices[tri];
-            int v2 = indices[tri + 1];
-
-            // Indices will sometimes be equal due to simple nodes (they only have one vertex)
-            if (v0 == v1 || v0 == v2 || v1 == v2) continue;
-
-            AddTriangle(state, v0, v1, v2);
-        }
+        AddTriangle(state, n00.index, n10.index, n11.index);
+        AddTriangle(state, n00.index, n11.index, n01.index);
     }
 
-    static void ConnectSideBranch(TreeMeshGeneratorState state, TreeMeshNode branchBase, List<TreeMeshNodeRing> branchMeshStructure) {
-        // Assume that the base resolution is 4, for the purposes of the following code.
-        Assert.IsTrue(BRANCH_BASE_RESOLUTION == 4);
-
-        // Let b refer to branchBase, v refer to vertices of ring 0 in branchMeshStructure, and n be the resolution of v.
-        // For the left half of the shape, we construct:
-        // p1 + p0 + v0, p1 + v0 + v1, p1 + v1 + v2, ... , p1 + v(floor(n/2) - 1) + v(floor(n/2)), p1 + v(floor(n/2)) + p2
-
-        // If n is odd, also add triangles for the middle with p2
-
-        // For the right half of the shape, we construct triangles in a similar fashion to the left side.
-
-        int p0 = branchBase.vertexUp;
-        int p1 = branchBase.vertexLeft;
-        int p2 = branchBase.vertexDown;
-        int p3 = branchBase.vertexRight;
-
-        TreeMeshNodeRing ring0 = branchMeshStructure[0];
-        int n = ring0.Resolution();
-
-        // Left side
-        List<int> leftIndices = new();
-        int leftMax = Mathf.FloorToInt(n / 2);
-        for (int i = 0 ; i <= leftMax ; i += 1) {
-            TreeMeshNode vert = ring0.GetPolygonNode(i);
-            leftIndices.Add(vert.vertexDown);
-            // Need to include intermediate nodes - apart from the last vertex's right neighbour,
-            // since this is too far from p1
-            if (i < leftMax) leftIndices.Add(vert.neighbourRight.vertexDown);
-        }
-
-        leftIndices.Insert(0, p1);
-        leftIndices.Add(p3);
-
-        for (int tri = 0 ; tri < leftIndices.Count - 1 ; tri += 1) AddTriangle(state, p2, leftIndices[tri], leftIndices[tri + 1]);
-
-        // Right side
-        List<int> rightIndices = new();
-        int rightMin = Mathf.CeilToInt(n / 2);
-        for (int i = rightMin ; i <= n ; i += 1) {
-            TreeMeshNode vert = ring0.GetPolygonNode(i);
-            rightIndices.Add(vert.vertexDown);
-            // Need to include intermediate nodes - apart from the last vertex's right neighbour,
-            if (i < n) leftIndices.Add(vert.neighbourRight.vertexDown);
-        }
-
-        rightIndices.Insert(0, p3);
-        rightIndices.Add(p1);
-
-        for (int tri = 0 ; tri < rightIndices.Count - 1 ; tri += 1) AddTriangle(state, p0, rightIndices[tri], rightIndices[tri + 1]);
-
-
-        // If n is odd, add middle triangles for p2
-
-        if (n % 2 != 0) {
-            TreeMeshNode l = ring0.GetPolygonNode(leftMax);
-            TreeMeshNode m = l.neighbourRight; // intermediate node
-            TreeMeshNode r = ring0.GetPolygonNode(rightMin);
-            AddTriangle(state, p2, l.vertexDown, m.vertexDown);
-            AddTriangle(state, p2, m.vertexDown, r.vertexDown);
-        }
-    }
-
-    static int AddVertex(TreeMeshGeneratorState state, Vector3 pos) {
+    static int AddVertex(TreeMeshGeneratorState state, Vector3 pos, Vector3 normal) {
         state.vertices.Add(pos);
+        state.normals.Add(normal);
         return state.vertices.Count - 1;
+    }
+
+    static void AdjustVertex(TreeMeshGeneratorState state, int index, Vector3 newPos) {
+        state.vertices[index] = newPos;
     }
 
     static void AddTriangle(TreeMeshGeneratorState state, int v1, int v2, int v3) {
@@ -380,41 +288,15 @@ public static class TreeMeshGenerator {
 
     class TreeMeshNode {
         public Vector3 position { get; private set; }
-        public TreeMeshNodeType type { get; private set; }
+        public Vector3 normal { get; private set; }
         // Neighbouring tree mesh nodes
         public TreeMeshNode neighbourUp, neighbourDown, neighbourLeft, neighbourRight;
         // The indices of the outer layer of vertices inside this node
-        // For a simple node, these are all the same value
-        // For a branch node, these vary
-        public int vertexUp, vertexDown, vertexLeft, vertexRight;
+        public int index;
 
-        public TreeMeshNode(Vector3 pos) {
-            position = pos;
-            type = TreeMeshNodeType.Indeterminate;
-        }
-
-        public void ConfirmSimple(TreeMeshGeneratorState state) {
-            Assert.IsTrue(type == TreeMeshNodeType.Indeterminate);
-
-            type = TreeMeshNodeType.Simple;
-            int vert = AddVertex(state, position);
-
-            vertexUp = vert;
-            vertexDown = vert;
-            vertexLeft = vert;
-            vertexRight = vert;
-        }
-
-        public void ConfirmBranch(TreeMeshGeneratorState state, Vector3 centre, Vector3 up, Vector3 down, Vector3 left, Vector3 right) {
-            Assert.IsTrue(type == TreeMeshNodeType.Indeterminate);
-            type = TreeMeshNodeType.Branch;
-
-            position = centre;
-
-            vertexUp = AddVertex(state, up);
-            vertexDown = AddVertex(state, down);
-            vertexLeft = AddVertex(state, left);
-            vertexRight = AddVertex(state, right);
+        public TreeMeshNode(Vector3 position, Vector3 normal) {
+            this.position = position;
+            this.normal = normal;
         }
 
         public void SetNeighbours(TreeMeshNode up, TreeMeshNode down, TreeMeshNode left, TreeMeshNode right) {
@@ -425,29 +307,29 @@ public static class TreeMeshGenerator {
         }
     }
 
-    enum TreeMeshNodeType {
-        Indeterminate, Simple, Branch
-    }
-
     class TreeMeshNodeRing {
         List<TreeMeshNode> meshNodes;
 
-        public TreeMeshNodeRing(TreeNode node, Vector3 normal, int resolution, TreeMeshNodeRing lowerRing, PlaneOrthoBasis previousBasis) {
+        public TreeMeshNodeRing(TreeMeshGeneratorState state, TreeNode node, Vector3 normal, int resolution,
+                    TreeMeshNodeRing lowerRing, PlaneOrthoBasis previousBasis) {
             meshNodes = new();
 
-            // Find the vertex positions
+            // Find the vertex positions & normals
             PlaneOrthoBasis basis = MeshUtility.PlaneOrthoBasis(normal);
             if (previousBasis != null) basis = MeshUtility.PlaneOrthoBasis(normal, previousBasis.v1, previousBasis.v2);
-            List<Vector3> vertexPositions = MeshUtility.ConstructRegularPolygon(basis, node.position, node.width, resolution);
+            (List<Vector3> positions, List<Vector3> normals) = MeshUtility.ConstructRegularPolygonWithNormals(basis, node.position, node.width, resolution);
 
-            // Create the polygon vertex mesh nodes
             meshNodes = new();
-            foreach (Vector3 pos in vertexPositions) meshNodes.Add(new(pos));
+            for (int i = 0 ; i < positions.Count ; i += 1) {
+                int index = AddVertex(state, positions[i], normals[i]);
+                meshNodes.Add(new(positions[i], normals[i]));
+                meshNodes[i].index = index;
+            }
 
             // Link the polygon vertex nodes
             bool hasLowerRing = lowerRing != null;
             for (int i = 0 ; i < resolution ; i += 1) {
-                // Up is null at this stage, but may be set by a later ring
+                // Up is null at this stage, but will be set by a later ring (except for the last ring)
                 TreeMeshNode up = null;
 
                 TreeMeshNode down = null;
@@ -456,32 +338,17 @@ public static class TreeMeshGenerator {
                     down.SetNeighbours(meshNodes[i], down.neighbourDown, down.neighbourLeft, down.neighbourRight);
                 }
 
-                TreeMeshNode left = GetPolygonNode(i - 1);
-                TreeMeshNode right = GetPolygonNode(i + 1);
+                TreeMeshNode left = GetNode(i - 1);
+                TreeMeshNode right = GetNode(i + 1);
 
                 meshNodes[i].SetNeighbours(up, down, left, right);
-            }
-
-            // Add intermediate nodes between adjacent vertex nodes
-            for (int i = 0 ; i < resolution ; i += 1) {
-                TreeMeshNode left = GetPolygonNode(i);
-                TreeMeshNode right = GetPolygonNode(i + 1);
-                TreeMeshNode middle = new((left.position + right.position) / 2);
-                // Look for the intermediate node directly below middle (if the lower ring exists)
-                TreeMeshNode down = hasLowerRing ? left.neighbourDown.neighbourRight : null;
-
-                left.SetNeighbours(left.neighbourUp, left.neighbourDown, left.neighbourLeft, middle);
-                right.SetNeighbours(right.neighbourUp, right.neighbourDown, middle, right.neighbourRight);
-                middle.SetNeighbours(null, down, left, right);
-                if (down != null) down.SetNeighbours(middle, down.neighbourDown, down.neighbourLeft, down.neighbourRight);
             }
         }
 
         /// <summary>
         /// Get a mesh node at a given index, in a circular fashion (i.e. -1 ==> resolution - 1).
-        /// Does not include intermediate nodes between vertices.
         /// </summary>
-        public TreeMeshNode GetPolygonNode(int index) {
+        public TreeMeshNode GetNode(int index) {
             int n = meshNodes.Count;
             int i = (n + index) % n;
             return meshNodes[i];

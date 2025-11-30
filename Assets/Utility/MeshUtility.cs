@@ -52,6 +52,8 @@ public static class MeshUtility {
 
     // <summary> Find the angle that p makes in a circle in the plane with basis orthoBasis and origin at centre </summary>
     public static float PolygonVertexToAngle(Vector3 p, PlaneOrthoBasis basis, Vector3 centre) {
+        // First, make sure p is in the span of basis!
+        p = OrthoProjToPlane(p, basis.normal, centre);
         // Translate to origin, so that p = rcos(t) * v1 + rsin(t) * v2;
         Vector3 pPrime = p - centre;
         // ==> rcos(t) = p * v1, rsin(t) = p * v2
@@ -62,9 +64,14 @@ public static class MeshUtility {
     }
 
     public static List<Vector3> ConstructRegularPolygon(PlaneOrthoBasis basis, Vector3 centre, float width, int resolution) {
+        return ConstructRegularPolygonWithNormals(basis, centre, width, resolution).Item1;
+    }
+
+    public static Tuple<List<Vector3>, List<Vector3>> ConstructRegularPolygonWithNormals(PlaneOrthoBasis basis, Vector3 centre, float width, int resolution) {
         int n = resolution;
 
         List<Vector3> vertices = new();
+        List<Vector3> normals = new();
         float deltaTheta = 2 * Mathf.PI / n;
 
         for (int i = 0 ; i < n ; i += 1) {
@@ -74,13 +81,14 @@ public static class MeshUtility {
             // Linear transformation of (1, 0, 0) --> v1, (0, 1, 0) --> v2
             Vector3 vTransformed = v.x * basis.v1 + v.y * basis.v2;
             // Ensure correct length of vectors (it should be on the circle with radius = width)
+            normals.Add(vTransformed.normalized);
             vTransformed = vTransformed.normalized * width;
             // Displacement
             Vector3 vTranslated = vTransformed + centre;
             vertices.Add(vTranslated);
         }
 
-        return vertices;
+        return new(vertices, normals);
     }
 
     /// <summary>
@@ -225,6 +233,8 @@ public class PlaneOrthoBasis {
     public Vector3 v1 { get; private set; }
     public Vector3 v2 { get; private set; }
 
+    public Vector3 normal { get; private set; }
+
     public PlaneOrthoBasis(Vector3 v1, Vector3 v2) {
         Assert.IsTrue(MeshUtility.Approximately(v1.magnitude, 1), "Basis vector magnitude != 1");
         Assert.IsTrue(MeshUtility.Approximately(v2.magnitude, 1), "Basis vector magnitude != 1");
@@ -232,5 +242,6 @@ public class PlaneOrthoBasis {
 
         this.v1 = v1.normalized;
         this.v2 = v2.normalized;
+        normal = Vector3.Cross(v2, v1).normalized;
     }
 }

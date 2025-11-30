@@ -38,10 +38,10 @@ public class Tree : MonoBehaviour {
 
             if (g.end != Vector3.zero) {
                 Gizmos.DrawLine(g.start, g.end);
-                Gizmos.DrawSphere(g.end, 0.01f);
+                // Gizmos.DrawSphere(g.end, 0.01f);
             }
 
-            else Gizmos.DrawSphere(g.start, 0.01f);
+            else Gizmos.DrawSphere(g.start, 0.005f);
         }
     }
 

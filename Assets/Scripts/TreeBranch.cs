@@ -350,6 +350,10 @@ public class TreeBranch {
         return s * Mathf.Exp(-a * d) * ((3*a + 1) / (a + 1));
     }
 
+    public PlaneOrthoBasis GetBasis() {
+        return phyllotaxyBasis;
+    }
+
 }
 
 
