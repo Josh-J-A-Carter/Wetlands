@@ -2,17 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using UnityEditor.PackageManager;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
 public class TreeBranch {
 
-    const int TERMINAL_BRANCH_DEPTH = 2;
-
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
     
     int depth;
+
+    int preSplitCount;
 
     TreeNode terminus;
     Vector3 terminusDirection;
@@ -27,7 +28,7 @@ public class TreeBranch {
     // i.e. what the previous leaf placement was
     int phyllotaxyState;
 
-    public TreeBranch(Vector3 startPos, Vector3 direction, int depth) {
+    public TreeBranch(Vector3 startPos, Vector3 direction, int depth, int preSplitCount = 0) {
         nodes = new();
         sideBranches = new();
         inactiveBuds = new();
@@ -47,12 +48,31 @@ public class TreeBranch {
         return depth;
     }
 
-    public bool IsTerminalBranch() {
-        return depth >= TERMINAL_BRANCH_DEPTH;
+    bool IsTerminalBranch(TreeParameters param) {
+        int terminal = int.MaxValue;
+
+        if (param.branchLengthByDepth.depth4 == 0) terminal = 4;
+        if (param.branchLengthByDepth.depth3 == 0) terminal = 3;
+        if (param.branchLengthByDepth.depth2 == 0) terminal = 2;
+        if (param.branchLengthByDepth.depth1 == 0) terminal = 1;
+        if (param.branchLengthByDepth.depth0 == 0) terminal = 0;
+
+        return depth >= terminal - 1;
     }
 
-    public bool HasReachedMaxGrowth() {
-        return IsTerminalBranch() && nodes.Count > 1;
+    int MaxLength(TreeParameters param) {
+        return depth switch {
+            0 => param.branchLengthByDepth.depth0,
+            1 => param.branchLengthByDepth.depth1,
+            2 => param.branchLengthByDepth.depth2,
+            3 => param.branchLengthByDepth.depth3,
+            4 => param.branchLengthByDepth.depth4,
+            _ => throw new Exception("Tree branch of depth > 4")
+        };
+    }
+
+    bool HasReachedMaxGrowth(TreeParameters param) {
+        return nodes.Count + preSplitCount > MaxLength(param);
     }
 
     // Get the index'th node in the branch, as well as its direction of growth.
@@ -92,7 +112,7 @@ public class TreeBranch {
         // Apply deltaPos to each node
         for (int i = 0 ; i < NodeCount() ; i += 1) GetNode(i).Item1.Translate(deltaPos);
         
-        if (HasReachedMaxGrowth()) return;
+        if (HasReachedMaxGrowth(param)) return;
 
         float growthVal = GrowthFactor(param) * light;
         float lengthGrowthFactor = growthVal * Tree.GROWTH_TICK_INCR;
@@ -113,21 +133,7 @@ public class TreeBranch {
 
         float internodeLength = (terminus.position - nodes.Last().position).magnitude;
 
-        if (internodeLength >= param.internodeLength) {
-            TreeNode newTerminus = new(terminus.position, 0.0f);
-            Vector3 newTerminusDirection = NewTerminusDirection(param);
-
-            nodes.Add(terminus);
-
-            terminus = newTerminus;
-            terminusDirection = newTerminusDirection;
-
-            //  Create new buds
-            CreateBuds(param, nodes.Count - 1);
-
-            //  Destroy old buds
-            DestroyBuds(param, nodes.Count - 4); // magic number!!
-        }
+        if (internodeLength >= param.internodeLength) NewNode(param);
 
         // Decide to grow a new branch or not
         float chance = Random.Range(0.0f, 1.0f);
@@ -150,9 +156,52 @@ public class TreeBranch {
         }
     }
 
-    private Vector3 NewTerminusDirection(TreeParameters param) {
-        (float theta, float phi) = MeshUtility.InvertSphere(terminusDirection);
+    private void NewNode(TreeParameters param) {
+        nodes.Add(terminus);
 
+        float chance = Random.Range(0.0f, 1.0f);
+        if (chance < ApexSplitChance(param)) {
+            // Account for any changes in basis as the branch has grown
+            PlaneOrthoBasis localBasis = MeshUtility.PlaneOrthoBasis(terminusDirection, phyllotaxyBasis.v1, phyllotaxyBasis.v2);
+
+            // Decide (semi-randomly) on the plane in which the split branches will live
+            float alpha = Random.Range(0, 2 * Mathf.PI);
+            Vector3 v1 = localBasis.v1 * Mathf.Cos(alpha) + localBasis.v2 * Mathf.Sin(alpha);
+            Vector3 v2 = terminusDirection;
+            // Assume branches will be pi radians separated (when projected onto localBasis)
+            Vector3 dir1 = v1;
+            Vector3 dir2 = -v1;
+            // Use param for the angle between (old) terminusDirection and resulting branches
+            float theta = param.apexSplitAngle;
+            Vector3 b1 = v2 * Mathf.Cos(theta) + dir1 * Mathf.Sin(theta);
+            Vector3 b2 = v2 * Mathf.Cos(theta) + dir2 * Mathf.Sin(theta);
+
+            // b2 becomes a separate branch     **with the same depth**
+            Vector3 startPos = terminus.position + b2 * terminus.width;
+            TreeBranch sideBranch = new(startPos, NewTerminusDirection(param, b2), depth, preSplitCount: nodes.Count - 1);
+            sideBranches.Add(new(nodes.Count - 1, sideBranch));
+
+            // b1 becomes the new terminal direction for this branch
+            terminus = new(terminus.position, 0.0f);
+            terminusDirection = NewTerminusDirection(param, b1);
+
+            // We do *not* add inactive buds at this node
+        }
+
+        else {
+            terminus = new(terminus.position, 0.0f);
+            terminusDirection = NewTerminusDirection(param, terminusDirection);
+
+            //  Create new buds
+            CreateBuds(param, nodes.Count - 1);
+
+            //  Destroy old buds
+            DestroyBuds(param, nodes.Count - 4); // magic number!!
+        }
+    }
+
+    private Vector3 NewTerminusDirection(TreeParameters param, Vector3 dir) {
+        (float theta, float phi) = MeshUtility.InvertSphere(dir);
         theta += Random.Range(-param.maxDirectionChangeAngle, param.maxDirectionChangeAngle);
         phi += Random.Range(-param.maxDirectionChangeAngle, param.maxDirectionChangeAngle);
 
@@ -163,12 +212,19 @@ public class TreeBranch {
         float s = param.growthSpeed;
         float d = depth;
         float a = param.apicalDominance;
-        if (IsTerminalBranch()) return 0; // No more side branches - otherwise performance will die
+        if (IsTerminalBranch(param)) return 0; // No more side branches - otherwise performance will die
         return s * Mathf.Exp(-a * d) / (2 - a) / 1000;
     }
 
+    private float ApexSplitChance(TreeParameters param) {
+        float d = depth;
+        float a = param.apicalDominance;
+        if (d > 0) return 0; // Only allow splitting for depth 0 branches
+        return Mathf.Exp(-5 * a) / 2;
+    }
+
     private void CreateBuds(TreeParameters param, int nodeIndex) {
-        if (IsTerminalBranch()) return;
+        if (IsTerminalBranch(param)) return;
 
         if (param.phyllotaxy == TreeParameters.Phyllotaxy.Whorled) {
             // May need to adjust the basis for this node, in case nodes change direction
@@ -274,8 +330,8 @@ public class TreeBranch {
         }
     }
 
-    private void DestroyBuds(TreeParameters _, int nodeIndex) {
-        if (IsTerminalBranch()) return;
+    private void DestroyBuds(TreeParameters param, int nodeIndex) {
+        if (IsTerminalBranch(param)) return;
 
         if (nodeIndex < 0) return;
 

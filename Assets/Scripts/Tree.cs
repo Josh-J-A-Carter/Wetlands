@@ -105,6 +105,12 @@ public class TreeParameters {
     [SerializeField]
     public PhyllotaxyCycle phyllotaxyAngleCycle = PhyllotaxyCycle.Planar;
 
+    [SerializeField]
+    public BranchLengthByDepth branchLengthByDepth = new();
+
+    [SerializeField]
+    public float apexSplitAngle = Mathf.PI / 8;
+
     public enum Phyllotaxy {
         Opposite,
         Alternate,
@@ -115,5 +121,14 @@ public class TreeParameters {
         Planar,
         Decussate,
         Spiral
+    }
+
+    [Serializable]
+    public class BranchLengthByDepth {
+        public int depth0 = 10;
+        public int depth1 = 8;
+        public int depth2 = 1;
+        public int depth3 = 0;
+        public int depth4 = 0;
     }
 }
