@@ -12,8 +12,6 @@ public static class TreeMeshGenerator {
         public List<Vector3> normals;
         public List<int> triangles;
 
-        public List<GizmoData> gizmos;
-
         /// <summary>
         /// Given a depth value, what should the corresponding resolution of the mesh be?
         /// i.e. 4 => square cylinder, 5 => pentagonal cylinder, etc.
@@ -27,17 +25,21 @@ public static class TreeMeshGenerator {
             vertices = new();
             normals = new();
             triangles = new();
-            gizmos = new();
         }
     }
     
-    public static Tuple<List<Vector3>, List<int>, List<GizmoData>> Generate(Tree tree, Func<int, int> branchRingResolution) {
+    public static TreeMesh Generate(Tree tree, Func<int, int> branchRingResolution) {
         TreeMeshGeneratorState state = new(tree, branchRingResolution);
 
         // Recursive branch generation algorithm
         GenerateBranch(state, tree.trunk, null);
+
+        TreeMesh tm = new();
+        tm.vertices = state.vertices;
+        tm.triangles = state.triangles;
+        tm.normals = state.normals;
         
-        return new(state.vertices, state.triangles, state.gizmos);
+        return tm;
     }
 
     static List<TreeMeshNodeRing> GenerateBranch(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {
@@ -65,7 +67,7 @@ public static class TreeMeshGenerator {
                 List<TreeMeshNodeRing> sideBranchStruct = GenerateBranch(state, sideBranch, nBasis);
 
                 // Project side branch base onto 
-                CalculateSideBranchAttachment(state, n, branchStruct[nodeIndex], sideBranchStruct[0], sideBranchStruct[1], nBasis);
+                CalculateSideBranchAttachment(state, n, sideBranch, branchStruct[nodeIndex], sideBranchStruct[0], sideBranchStruct[1], nBasis);
             }
         }
 
@@ -118,14 +120,27 @@ public static class TreeMeshGenerator {
     }
 
 
-    static void CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeNode parentCentre, 
+    static void CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeNode parentCentre, TreeBranch childBranch,
             TreeMeshNodeRing parentRing, TreeMeshNodeRing childRing, TreeMeshNodeRing nextChildRing, PlaneOrthoBasis attachmentBasis) {
+        
+        // Connect the branch base to within the branch, in case it doesn't perfectly line up once projected
+        int v0 = AddVertex(state, parentCentre.position, Vector3.zero);
+        GizmoManager.AddGizmo(parentCentre.position * state.tree.transform.lossyScale.x, Color.red);
+
+        for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
+            int v1 = childRing.GetNode(i).index;
+            int v2 = childRing.GetNode(i + 1).index;
+
+            AddTriangle(state, v0, v1, v2);
+        }
+
+        // If this branch is split from parent, can't safely project it without jank, but it will already be close enough
+        if (childBranch.IsSplitBranch()) return;
 
         for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
             // Determine which mesh nodes to insert this between
             TreeMeshNode baseNode = childRing.GetNode(i);
             float theta = MeshUtility.PolygonVertexToAngle(baseNode.position, attachmentBasis, parentCentre.position);
-            // state.gizmos.Add(new(val * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
             // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
             // i =< theta * n / (2 * PI) =< i + 1
             // So i = floor(theta * n / (2 * PI))
@@ -147,7 +162,6 @@ public static class TreeMeshGenerator {
             // Extend the line between baseNode and nextNode through to this plane defined by normal & left
             TreeMeshNode nextNode = nextChildRing.GetNode(i);
             Vector3 finalPos = MeshUtility.IntersectLineWithPlane(baseNode.position, nextNode.position, normal, left.position);
-            // state.gizmos.Add(new(finalPos * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
             AdjustVertex(state, baseNode.index, finalPos);
         }
     }
@@ -265,14 +279,8 @@ public static class TreeMeshGenerator {
 
 }
 
-public class GizmoData {
-    public Vector3 start;
-    public Vector3 end;
-    public Color col;
-
-    public GizmoData(Vector3 start, Vector3 end, Color col) {
-        this.start = start;
-        this.end = end;
-        this.col = col;
-    }
+public class TreeMesh {
+    public List<Vector3> vertices;
+    public List<Vector3> normals;
+    public List<int> triangles;
 }

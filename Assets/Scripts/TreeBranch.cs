@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
-using UnityEditor.PackageManager;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -34,6 +33,7 @@ public class TreeBranch {
         inactiveBuds = new();
 
         this.depth = depth;
+        this.preSplitCount = preSplitCount;
 
         nodes.Add(new(startPos, START_WIDTH));
 
@@ -350,8 +350,8 @@ public class TreeBranch {
         return s * Mathf.Exp(-a * d) * ((3*a + 1) / (a + 1));
     }
 
-    public PlaneOrthoBasis GetBasis() {
-        return phyllotaxyBasis;
+    public bool IsSplitBranch() {
+        return preSplitCount > 0;
     }
 
 }

@@ -14,7 +14,6 @@ public class Tree : MonoBehaviour {
     
     public TreeBranch trunk { get; private set; }
 
-    List<GizmoData> gizmos;
 
     Mesh mesh;
 
@@ -29,38 +28,20 @@ public class Tree : MonoBehaviour {
     }
 
 
-    private void OnDrawGizmos() {
-
-        if (gizmos == null) return;
-
-        foreach (GizmoData g in gizmos) {
-            Gizmos.color = g.col;
-
-            if (g.end != Vector3.zero) {
-                Gizmos.DrawLine(g.start, g.end);
-            }
-
-            else Gizmos.DrawSphere(g.start, 0.005f);
-        }
-    }
-
-
     IEnumerator GrowthTick() {
         while (true) {
             // Calculate light absorbed
             float light = 1.0f;
 
             // Growth
-            this.gizmos = new();
             trunk.Grow(light, Vector3.zero, currentParameters);
 
             // Recursively add new side branches
 
             // Update the mesh
-            (List<Vector3> vertices, List<int> triangles, List<GizmoData> gizmos) = TreeMeshGenerator.Generate(this, MeshResolutionByDepth);
-            mesh.vertices = vertices.ToArray();
-            mesh.triangles = triangles.ToArray();
-            this.gizmos.AddRange(gizmos);
+            TreeMesh tm = TreeMeshGenerator.Generate(this, MeshResolutionByDepth);
+            mesh.vertices = tm.vertices.ToArray();
+            mesh.triangles = tm.triangles.ToArray();
 
             mesh.RecalculateNormals();
 
