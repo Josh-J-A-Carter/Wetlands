@@ -40,12 +40,12 @@ public static class TreeMeshGenerator {
         return new(state.vertices, state.triangles, state.gizmos);
     }
 
-    static TreeMeshNodeRing GenerateBranch(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {
+    static List<TreeMeshNodeRing> GenerateBranch(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis previousBasis) {
 
         // Create the tentative mesh structure
             // If this branch is already a side branch, we need to use its parent's basis to inform this one's
             // Otherwise, the connections between branches could become twisted
-        List<TreeMeshNodeRing> branchMeshStructure = BranchMeshStructure(state, branch, previousBasis);
+        List<TreeMeshNodeRing> branchStruct = BranchMeshStructure(state, branch, previousBasis);
 
         // Resolve side branches, and recursively generate their mesh
         for (int nodeIndex = 0 ; nodeIndex < branch.NodeCount() ; nodeIndex += 1) {
@@ -62,17 +62,17 @@ public static class TreeMeshGenerator {
                 Assert.IsTrue(nodeIndex != branch.NodeCount() - 1);
 
                 // Recurse on the branch
-                TreeMeshNodeRing sideBranchBase = GenerateBranch(state, sideBranch, nBasis);
+                List<TreeMeshNodeRing> sideBranchStruct = GenerateBranch(state, sideBranch, nBasis);
 
                 // Project side branch base onto 
-                CalculateSideBranchAttachment(state, n, branchMeshStructure[nodeIndex], sideBranchBase, nBasis);
+                CalculateSideBranchAttachment(state, n, branchStruct[nodeIndex], sideBranchStruct[0], sideBranchStruct[1], nBasis);
             }
         }
 
         // Create triangles
 
         // Moving frame of 4 mesh nodes
-        TreeMeshNode n00 = branchMeshStructure[0].GetNode(0);
+        TreeMeshNode n00 = branchStruct[0].GetNode(0);
         TreeMeshNode n10 = n00.neighbourUp;
         TreeMeshNode n01 = n00.neighbourRight;
         TreeMeshNode n11 = n01.neighbourUp;
@@ -100,9 +100,9 @@ public static class TreeMeshGenerator {
         }
 
         // 3. Close up the top
-        ConnectTerminalRing(state, branchMeshStructure.Last());
+        ConnectTerminalRing(state, branchStruct.Last());
 
-        return branchMeshStructure.First();
+        return branchStruct;
     }
 
     static void ConnectTerminalRing(TreeMeshGeneratorState state, TreeMeshNodeRing terminalRing) {
@@ -113,13 +113,13 @@ public static class TreeMeshGenerator {
             int v0 = n0.index;
             int v1 = n1.index;
             int v2 = n2.index;
-            AddTriangle(state, v0, v1, v2);
+            AddTriangle(state, v1, v0, v2);
         }
     }
 
 
     static void CalculateSideBranchAttachment(TreeMeshGeneratorState state, TreeNode parentCentre, 
-            TreeMeshNodeRing parentRing, TreeMeshNodeRing childRing, PlaneOrthoBasis attachmentBasis) {
+            TreeMeshNodeRing parentRing, TreeMeshNodeRing childRing, TreeMeshNodeRing nextChildRing, PlaneOrthoBasis attachmentBasis) {
 
         for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
             // Determine which mesh nodes to insert this between
@@ -140,112 +140,16 @@ public static class TreeMeshGenerator {
             Vector3 v1 = right.position - left.position;
             Vector3 v2 = left.neighbourUp.position - left.position;
 
-            if (belowOrAbove < 0) v2 = left.neighbourDown.position - left.position;                
+            if (belowOrAbove < 0) v2 = left.neighbourDown.position - left.position;
 
             Vector3 normal = Vector3.Cross(v1, v2).normalized;
 
-            Vector3 finalPos = MeshUtility.OrthoProjToPlane(baseNode.position, normal, left.position);
+            // Extend the line between baseNode and nextNode through to this plane defined by normal & left
+            TreeMeshNode nextNode = nextChildRing.GetNode(i);
+            Vector3 finalPos = MeshUtility.IntersectLineWithPlane(baseNode.position, nextNode.position, normal, left.position);
             // state.gizmos.Add(new(finalPos * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
             AdjustVertex(state, baseNode.index, finalPos);
         }
-
-
-
-        // // Find the polygon at the base of the side branch
-        // // and map this into the upper and lower planes on the main branch
-        
-        // // centre, p0 & p2 are projected onto the line between left and right
-        // // Don't clamp, so we can see where pl and pr *would* end up on the line;
-        // // we want to detect if they go off either end of the line!
-        // Vector3 centre = MeshUtility.ObliqueProjToLine(nPrime.position, nPrimeNormal, left.position, right.position);
-        // Vector3 pl = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.position, right.position, clamp: false);
-        // Vector3 pr = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, left.position, right.position, clamp: false);
-
-        // // Determine where on this line segment the branch should go, i.e. is it in the middle, or on a corner?
-        // // If pl is before 'left' on the line, then 'left' is the node that should become a branch.
-        // // If pr is after 'right' on the line, then 'right' is the node that should become a branch
-        //     // ==> This can be tested by solving   p = left + t * (right - left)   for t
-        //     // ==> t = (p - left) . (right - left) / || right - left ||^2
-        //     // If p is inside left and right on the line, then 0 < t < 1. Otherwise, p is before or after.
-        // Vector3 l = left.position;
-        // Vector3 r = right.position;
-        // float tl = Vector3.Dot(pl - l, r - l) / Vector3.Dot(r - l, r - l);
-        // float tr = Vector3.Dot(pr - l, r - l) / Vector3.Dot(r - l, r - l);
-
-        // if (tl < 0) {
-        //     // p1 lies on the line between left and left.neighbourLeft, while p3 coincides with pr.
-        //     Vector3 p1 = MeshUtility.ObliqueProjToLine(preProjection[1], nPrimeNormal, left.neighbourLeft.position, left.position);
-        //     Vector3 p3 = pr;
-
-        //     // Find the line along which to project p0
-        //     Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
-        //     Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
-
-        //     // Find the line along which to project p2
-        //     Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-        //     Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
-
-        //     state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
-        //     state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
-        //     state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
-        //     state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
-
-
-        //     // The 'left' node becomes the branch
-        //     left.ConfirmBranch(state, centre, p0, p2, p1, p3);
-
-        //     return new(left, nPrimeBasis);
-        // }
-
-        // else if (tr > 1) {
-        //     // p3 lies on the line between right and right.neighbourRight, while p1 coincides with pl.
-        //     Vector3 p1 = pl;
-        //     Vector3 p3 = MeshUtility.ObliqueProjToLine(preProjection[3], nPrimeNormal, right.neighbourRight.position, right.position);
-
-        //     // Find the line along which to project p0
-        //     Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
-        //     Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
-
-        //     // Find the line along which to project p2
-        //     Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-        //     Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
-
-        //     state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
-        //     state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
-        //     state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
-        //     state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
-
-
-        //     // The 'right' node becomes the branch
-        //     right.ConfirmBranch(state, centre, p0, p2, p1, p3);
-            
-        //     return new(right, nPrimeBasis);
-        // }
-
-        // else {
-        //     // pl and pr coincide with p1 and p3 due to all being on the same line segment
-        //     Vector3 p1 = pl;
-        //     Vector3 p3 = pr;
-
-        //     // Find the line along which to project p0
-        //     Vector3 centreUp = MeshUtility.OrthoProjToLine(centre, right.neighbourUp.position - left.neighbourUp.position, left.neighbourUp.position);
-        //     Vector3 p0 = MeshUtility.ObliqueProjToLine(preProjection[0], nPrimeNormal, centre, centreUp);
-
-        //     // Find the line along which to project p2
-        //     Vector3 centreDown = MeshUtility.OrthoProjToLine(centre, right.neighbourDown.position - left.neighbourDown.position, left.neighbourDown.position);
-        //     Vector3 p2 = MeshUtility.ObliqueProjToLine(preProjection[2], nPrimeNormal, centreDown, centre);
-
-        //     state.gizmos.Add(new(p0 * state.tree.transform.lossyScale.x, Vector3.zero, Color.red));
-        //     state.gizmos.Add(new(p1 * state.tree.transform.lossyScale.x, Vector3.zero, Color.green));
-        //     state.gizmos.Add(new(p2 * state.tree.transform.lossyScale.x, Vector3.zero, Color.blue));
-        //     state.gizmos.Add(new(p3 * state.tree.transform.lossyScale.x, Vector3.zero, Color.yellow));
-
-            
-        //     // Update the intermediate mesh node between left and right
-        //     left.neighbourRight.ConfirmBranch(state, centre, p0, p2, p1, p3);
-
-        //     return new(left.neighbourRight, nPrimeBasis);
-        // }
     }
 
     static List<TreeMeshNodeRing> BranchMeshStructure(TreeMeshGeneratorState state, TreeBranch branch, PlaneOrthoBasis basis) {

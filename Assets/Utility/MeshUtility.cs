@@ -150,6 +150,18 @@ public static class MeshUtility {
         return x1 + t * (x2 - x1);
     }
 
+    /// <summary>
+    /// Find where the line, which goes through p1 and has direction p2 - p1, intersects
+    /// the plane with normal n and passes through x.
+    /// </summary>
+    public static Vector3 IntersectLineWithPlane(Vector3 p1, Vector3 p2, Vector3 n, Vector3 x) {
+        Vector3 d = (p2 - p1).normalized;
+        n = n.normalized;
+
+        float t = Vector3.Dot(n, x - p1) / Vector3.Dot(n, d);
+        return p1 + t * d;
+    }
+
     public static float InvertCircle(float rcosx, float rsinx) {
         float r = Mathf.Sqrt(rcosx * rcosx + rsinx * rsinx);
         if (rsinx >= 0) return Mathf.Acos(rcosx / r);
