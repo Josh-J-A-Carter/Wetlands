@@ -16,8 +16,12 @@ public class Tree : MonoBehaviour {
 
     Mesh mesh;
 
-    public void Start() {
+    public void ResetTree() {
         trunk = new(Vector3.zero, Vector3.up, 0);
+    }
+
+    public void Start() {
+        ResetTree();
         
         // Make the mesh
         mesh = new();
@@ -39,6 +43,9 @@ public class Tree : MonoBehaviour {
 
             // Update the mesh
             TreeMesh tm = TreeMeshGenerator.Generate(this, MeshResolutionByDepth);
+
+            mesh.Clear();
+
             mesh.vertices = tm.vertices.ToArray();
             mesh.triangles = tm.triangles.ToArray();
 
