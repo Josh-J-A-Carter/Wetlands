@@ -7,6 +7,8 @@ using Random = UnityEngine.Random;
 
 public class TreeBranch {
 
+    Tree parent;
+
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
     
@@ -21,17 +23,20 @@ public class TreeBranch {
 
     List<Tuple<int, TreeBranch>> sideBranches;
     List<Tuple<int, Vector3>> inactiveBuds;
+    List<Tuple<int, TreeFoliage>> livingFoliage;
 
     PlaneOrthoBasis phyllotaxyBasis;
     // Keep track of where we are in the leaf arrangement cycle,
     // i.e. what the previous leaf placement was
     int phyllotaxyState;
 
-    public TreeBranch(Vector3 startPos, Vector3 direction, int depth, int preSplitCount = 0) {
+    public TreeBranch(Tree parent, Vector3 startPos, Vector3 direction, int depth, int preSplitCount = 0) {
         nodes = new();
         sideBranches = new();
         inactiveBuds = new();
+        livingFoliage = new();
 
+        this.parent = parent;
         this.depth = depth;
         this.preSplitCount = preSplitCount;
 
@@ -42,6 +47,9 @@ public class TreeBranch {
 
         // Include some random variation for each branch to make it look more natural
         phyllotaxyBasis = MeshUtility.PlaneOrthoBasis(terminusDirection, MeshUtility.RandomVector(), Vector3.zero);
+
+        // Foliage
+        CreateFoliage(parent.CurrentParameters());
     }
 
     public int GetDepth() {
@@ -131,6 +139,8 @@ public class TreeBranch {
         // Move the terminal bud in its direction of growth
         terminus.Translate(terminusDirection * lengthGrowthFactor);
 
+        UpdateFoliage(light, param);
+
         float internodeLength = (terminus.position - nodes.Last().position).magnitude;
 
         if (internodeLength >= param.internodeLength) NewNode(param);
@@ -149,7 +159,7 @@ public class TreeBranch {
             Vector3 dirInPlane = MeshUtility.OrthoProjToPlane(dir, stemDir, Vector3.zero).normalized;
             Vector3 startPos = parentNode.position + dirInPlane * parentNode.width;
 
-            TreeBranch sideBranch = new(startPos, dir, depth + 1);
+            TreeBranch sideBranch = new(parent, startPos, dir, depth + 1);
             sideBranches.Add(new(nodeIndex, sideBranch));
 
             inactiveBuds.RemoveAt(arrayIndex);
@@ -178,7 +188,7 @@ public class TreeBranch {
 
             // b2 becomes a separate branch     **with the same depth**
             Vector3 startPos = terminus.position + b2 * terminus.width;
-            TreeBranch sideBranch = new(startPos, NewTerminusDirection(param, b2), depth, preSplitCount: nodes.Count - 1);
+            TreeBranch sideBranch = new(parent, startPos, NewTerminusDirection(param, b2), depth, preSplitCount: nodes.Count - 1);
             sideBranches.Add(new(nodes.Count - 1, sideBranch));
 
             // b1 becomes the new terminal direction for this branch
@@ -186,17 +196,23 @@ public class TreeBranch {
             terminusDirection = NewTerminusDirection(param, b1);
 
             // We do *not* add inactive buds at this node
+            // But can add foliage :)
+            CreateFoliage(param);
+            DestroyFoliage(nodes.Count - param.leafDeletionDepth);
+
         }
 
         else {
             terminus = new(terminus.position, 0.0f);
             terminusDirection = NewTerminusDirection(param, terminusDirection);
 
-            //  Create new buds
+            //  Buds
             CreateBuds(param, nodes.Count - 1);
+            DestroyBuds(param, nodes.Count - param.budDeletionDepth);
 
-            //  Destroy old buds
-            DestroyBuds(param, nodes.Count - 4); // magic number!!
+            // Foliage
+            CreateFoliage(param);
+            DestroyFoliage(nodes.Count - param.leafDeletionDepth);
         }
     }
 
@@ -343,11 +359,82 @@ public class TreeBranch {
         }
     }
 
+    private void DestroyFoliage(int nodeIndex) {
+        if (nodeIndex < 0) return;
+
+        for (int i = 0 ; i < livingFoliage.Count ; i += 1) {
+            if (livingFoliage[i].Item1 == nodeIndex) livingFoliage[i].Item2.BeginDeath();
+        }
+    }
+
+    private void CreateFoliage(TreeParameters param) {
+        if (HasReachedMaxGrowth(param)) return;
+
+        if (IsTerminalBranch(param)) {
+            // chance of creating *one* set of foliage
+            float foliageChance = Random.Range(0.0f, 1.0f);
+            if (foliageChance < param.terminalBranchLeafChance) CreateFoliageInstance(param, Random.Range(0, 2 * Mathf.PI));
+
+            return;
+        }
+
+        float offset1 = Random.Range(0, 2 * Mathf.PI);
+        float offset2 = CreateFoliageInstance(param, offset1);
+        CreateFoliageInstance(param, offset2);
+    }
+
+    private float CreateFoliageInstance(TreeParameters param, float angleOffset) {
+        GameObject obj = UnityEngine.Object.Instantiate(param.leavesPrefab, parent.transform);
+
+        TreeFoliage foliage = obj.GetComponent<TreeFoliage>();
+        Assert.IsNotNull(foliage);
+
+        PlaneOrthoBasis localBasis = MeshUtility.PlaneOrthoBasis(terminusDirection, phyllotaxyBasis.v1, phyllotaxyBasis.v2);
+        float theta = angleOffset + Random.Range(param.minLeafPairAngleDiff, param.maxLeafPairAngleDiff);
+        Vector3 upward = Mathf.Cos(theta) * localBasis.v1 + Mathf.Sin(theta) * localBasis.v2;
+        float thetaPrime = theta + Mathf.PI / 2;
+        Vector3 forward = Mathf.Cos(thetaPrime) * localBasis.v1 + Mathf.Sin(thetaPrime) * localBasis.v2;
+
+        Vector3 midpoint = (terminus.position + nodes.Last().position) / 2;
+
+        foliage.SetRotation(forward, upward);
+        foliage.SetPosition(midpoint);
+
+        int foliageConnectionIndex = nodes.Count - 1;
+
+        livingFoliage.Add(new(foliageConnectionIndex, foliage));
+
+        return theta;
+    }
+
+    private void UpdateFoliage(float light, TreeParameters param) {
+        float growthAmount = GrowthFactor(param) * light * Tree.GROWTH_TICK_INCR * param.leafToLengthGrowthRatio;
+        float deathAmount = growthAmount;
+
+        for (int i = 0 ; i < livingFoliage.Count ; i += 1) {
+            (int at, TreeFoliage foliage) = livingFoliage[i];
+
+            Vector3 midpoint = (GetNode(at).Item1.position + GetNode(at + 1).Item1.position) / 2;
+            foliage.SetPosition(parent.Origin() + midpoint);
+
+            if (!foliage.IsDying()) foliage.Grow(growthAmount);
+
+            else {
+                bool dead = foliage.Die(deathAmount);
+                if (dead) {
+                    UnityEngine.Object.Destroy(foliage.gameObject);
+                    livingFoliage.RemoveAt(i);
+                    i -= 1;
+                }
+            }
+        }
+    }
+
     private float GrowthFactor(TreeParameters param) {
         float s = param.growthSpeed;
         float d = depth;
         float a = param.apicalDominance;
-        return s * Mathf.Exp(-a * d) * ((3*a + 1) / (a + 1));
+        return s * Mathf.Exp(-a * d) * ((2*a + 1) / (a + 1));
     }
 
     public bool IsSplitBranch() {

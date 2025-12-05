@@ -17,7 +17,7 @@ public class Tree : MonoBehaviour {
     Mesh mesh;
 
     public void ResetTree() {
-        trunk = new(Vector3.zero, Vector3.up, 0);
+        trunk = new(this, Vector3.zero, Vector3.up, 0);
     }
 
     public void Start() {
@@ -28,6 +28,14 @@ public class Tree : MonoBehaviour {
         GetComponent<MeshFilter>().mesh = mesh;
 
         StartCoroutine(GrowthTick());
+    }
+
+    public TreeParameters CurrentParameters() {
+        return currentParameters;
+    }
+
+    public Vector3 Origin() {
+        return transform.position;
     }
 
 
@@ -86,6 +94,9 @@ public class TreeParameters {
     public float internodeLength = 0.5f;
 
     [SerializeField]
+    public int budDeletionDepth = 4;
+
+    [SerializeField]
     public Phyllotaxy phyllotaxy = Phyllotaxy.Opposite;
 
     [SerializeField]
@@ -96,6 +107,24 @@ public class TreeParameters {
 
     [SerializeField]
     public float apexSplitAngle = Mathf.PI / 8;
+
+    [SerializeField]
+    public GameObject leavesPrefab;
+
+    [SerializeField]
+    public float leafToLengthGrowthRatio = 0.5f;
+
+    [SerializeField]
+    public int leafDeletionDepth = 3;
+
+    [SerializeField]
+    public float minLeafPairAngleDiff = Mathf.PI/3;
+
+    [SerializeField]
+    public float maxLeafPairAngleDiff = Mathf.PI;
+
+    [SerializeField]
+    public float terminalBranchLeafChance = 0.5f;
 
     public enum Phyllotaxy {
         Opposite,
