@@ -12,21 +12,75 @@ Shader "Custom/Foliage Shader" {
         Cull Off
 
         Pass {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+
             HLSLPROGRAM
+
             #pragma vertex vert
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            struct appdata {
+            struct attributes {
+                float3 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct interpolators {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+
+            interpolators vert(attributes input) {
+                interpolators output;
+
+                VertexPositionInputs positions = GetVertexPositionInputs(input.positionOS);
+                output.positionCS = positions.positionCS;
+
+                output.uv = TRANSFORM_TEX(input.uv, _MainTex);
+
+                return output;
+            }
+
+            float4 frag(interpolators input) : SV_Target {
+                float4 col = tex2D(_MainTex, input.uv);
+
+                if (col.a == 0) discard;
+
+                return 0;
+            }
+
+            ENDHLSL
+        }
+
+        Pass {
+            Name "ForwardLit"
+            Tags { "LightMode" = "UniversalForward" }
+
+            HLSLPROGRAM
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+            struct attributes {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
             };
 
-            struct v2f {
+            struct interpolators {
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normalWS : TEXCOORD2;
+                float4 shadowCoords : TEXCOORD3;
             };
 
             sampler2D _MainTex;
@@ -36,40 +90,42 @@ Shader "Custom/Foliage Shader" {
 
             float3 _TreeCentreWS;
 
-            v2f vert (appdata v) {
-                v2f o;
+            interpolators vert (attributes input) {
+                interpolators output;
                 
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                output.uv = TRANSFORM_TEX(input.uv, _MainTex);
 
-                VertexPositionInputs positions = GetVertexPositionInputs(v.positionOS.xyz);
+                VertexPositionInputs positions = GetVertexPositionInputs(input.positionOS.xyz);
 
-                o.positionCS = positions.positionCS;
+                output.positionCS = positions.positionCS;
                 // Foliage normals are calculated from the centre of the tree
-                o.normalWS = positions.positionWS - _TreeCentreWS;
-
+                output.normalWS = positions.positionWS - _TreeCentreWS;
                 
-                // o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
+                // Shadows
+                output.shadowCoords = GetShadowCoord(positions);
+                
+                // output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 // Get the VertexNormalInputs of the vertex, which contains the normal in world space
-                // VertexNormalInputs positions = GetVertexNormalInputs(v.positionOS);
-                // o.normalWS = positions.normalWS.xyz;
+                // VertexNormalInputs positions = GetVertexNormalInputs(input.positionOS);
+                // output.normalWS = positions.normalWS.xyz;
                 // Get the properties of the main light
                 // Light light = GetMainLight();
-                // o.lightAmount = LightingLambert(light.color, light.direction, o.normalWS.xyz);
+                // output.lightAmount = LightingLambert(light.color, light.direction, o.normalWS.xyz);
                 
-                return o;
+                return output;
             }
 
-            float4 frag (v2f i) : SV_Target {
-                float4 col = tex2D(_MainTex, i.uv);
+            float4 frag (interpolators input) : SV_Target {
+                float4 col = tex2D(_MainTex, input.uv);
 
                 if (col.a == 0) discard;
 
-                // return float4(normalize(i.normalWS), 1);
+                float shadowAmount = MainLightRealtimeShadow(input.shadowCoords);
 
                 Light light = GetMainLight();
-                float3 lightAmount = LightingLambert(light.color, light.direction, normalize(i.normalWS));
+                float3 lightAmount = LightingLambert(light.color, light.direction, normalize(input.normalWS));
 
-                return col * _Tint * float4(lightAmount, 1);
+                return col * _Tint * float4(lightAmount, 1.0) * shadowAmount;
             }
 
             ENDHLSL
