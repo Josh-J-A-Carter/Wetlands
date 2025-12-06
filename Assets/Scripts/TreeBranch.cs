@@ -366,7 +366,9 @@ public class TreeBranch {
         if (nodeIndex < 0) return;
 
         for (int i = 0 ; i < livingFoliage.Count ; i += 1) {
-            if (livingFoliage[i].Item1 == nodeIndex) livingFoliage[i].Item2.BeginDeath();
+            (int index, TreeFoliage foliage) = livingFoliage[i];
+            if (!foliage) continue;
+            if (index == nodeIndex) livingFoliage[i].Item2.BeginDeath();
         }
     }
 
@@ -415,7 +417,7 @@ public class TreeBranch {
     /// </summary>
     /// <returns></returns>
     private Vector3 GetFoliageLogicalCentre() {
-        if (depth <= 1) return nodes[0].position;
+        if (depth <= 1) return nodes[0].position + parent.Origin();
 
         return parentBranch.GetFoliageLogicalCentre();
     }
@@ -426,6 +428,8 @@ public class TreeBranch {
 
         for (int i = 0 ; i < livingFoliage.Count ; i += 1) {
             (int at, TreeFoliage foliage) = livingFoliage[i];
+
+            if (!foliage) continue;
 
             Vector3 midpoint = (GetNode(at).Item1.position + GetNode(at + 1).Item1.position) / 2;
             foliage.SetPosition(parent.Origin() + midpoint);

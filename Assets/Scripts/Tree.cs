@@ -18,6 +18,9 @@ public class Tree : MonoBehaviour {
 
     public void ResetTree() {
         trunk = new(this, null, Vector3.zero, Vector3.up, 0);
+
+        TreeFoliage[] foliage = GetComponentsInChildren<TreeFoliage>();
+        foreach (TreeFoliage f in foliage) Destroy(f.gameObject);
     }
 
     public void Start() {
