@@ -124,8 +124,13 @@ Shader "Custom/Foliage Shader" {
 
                 Light light = GetMainLight();
                 float3 lightAmount = LightingLambert(light.color, light.direction, normalize(input.normalWS));
+                lightAmount *= shadowAmount;
+                
+                float3 lightAmbient = float3(0.2, 0.2, 0.2);
+                lightAmount += lightAmbient;
+                lightAmount = clamp(lightAmount, float3(0, 0, 0), float3(1, 1, 1));
 
-                return col * _Tint * float4(lightAmount, 1.0) * shadowAmount;
+                return col * _Tint * float4(lightAmount, 1.0);
             }
 
             ENDHLSL

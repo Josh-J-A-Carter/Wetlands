@@ -17,7 +17,7 @@ public class Tree : MonoBehaviour {
     Mesh mesh;
 
     public void ResetTree() {
-        trunk = new(this, Vector3.zero, Vector3.up, 0);
+        trunk = new(this, null, Vector3.zero, Vector3.up, 0);
     }
 
     public void Start() {

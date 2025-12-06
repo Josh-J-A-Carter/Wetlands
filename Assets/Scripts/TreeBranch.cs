@@ -9,6 +9,8 @@ public class TreeBranch {
 
     Tree parent;
 
+    TreeBranch parentBranch;
+
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
     
@@ -30,13 +32,14 @@ public class TreeBranch {
     // i.e. what the previous leaf placement was
     int phyllotaxyState;
 
-    public TreeBranch(Tree parent, Vector3 startPos, Vector3 direction, int depth, int preSplitCount = 0) {
+    public TreeBranch(Tree parent, TreeBranch parentBranch, Vector3 startPos, Vector3 direction, int depth, int preSplitCount = 0) {
         nodes = new();
         sideBranches = new();
         inactiveBuds = new();
         livingFoliage = new();
 
         this.parent = parent;
+        this.parentBranch = parentBranch;
         this.depth = depth;
         this.preSplitCount = preSplitCount;
 
@@ -159,7 +162,7 @@ public class TreeBranch {
             Vector3 dirInPlane = MeshUtility.OrthoProjToPlane(dir, stemDir, Vector3.zero).normalized;
             Vector3 startPos = parentNode.position + dirInPlane * parentNode.width;
 
-            TreeBranch sideBranch = new(parent, startPos, dir, depth + 1);
+            TreeBranch sideBranch = new(parent, this, startPos, dir, depth + 1);
             sideBranches.Add(new(nodeIndex, sideBranch));
 
             inactiveBuds.RemoveAt(arrayIndex);
@@ -188,7 +191,7 @@ public class TreeBranch {
 
             // b2 becomes a separate branch     **with the same depth**
             Vector3 startPos = terminus.position + b2 * terminus.width;
-            TreeBranch sideBranch = new(parent, startPos, NewTerminusDirection(param, b2), depth, preSplitCount: nodes.Count - 1);
+            TreeBranch sideBranch = new(parent, this, startPos, NewTerminusDirection(param, b2), depth, preSplitCount: nodes.Count - 1);
             sideBranches.Add(new(nodes.Count - 1, sideBranch));
 
             // b1 becomes the new terminal direction for this branch
@@ -407,6 +410,16 @@ public class TreeBranch {
         return theta;
     }
 
+    /// <summary>
+    /// Helper method for deciding what foliage should use as its reference center. Used in lighting calculations.
+    /// </summary>
+    /// <returns></returns>
+    private Vector3 GetFoliageLogicalCentre() {
+        if (depth <= 1) return nodes[0].position;
+
+        return parentBranch.GetFoliageLogicalCentre();
+    }
+
     private void UpdateFoliage(float light, TreeParameters param) {
         float growthAmount = GrowthFactor(param) * light * Tree.GROWTH_TICK_INCR * param.leafToLengthGrowthRatio;
         float deathAmount = growthAmount;
@@ -417,10 +430,12 @@ public class TreeBranch {
             Vector3 midpoint = (GetNode(at).Item1.position + GetNode(at + 1).Item1.position) / 2;
             foliage.SetPosition(parent.Origin() + midpoint);
 
-            if (!foliage.IsDying()) foliage.Grow(growthAmount);
+            Vector3 centre = GetFoliageLogicalCentre();
+
+            if (!foliage.IsDying()) foliage.Grow(growthAmount, centre);
 
             else {
-                bool dead = foliage.Die(deathAmount);
+                bool dead = foliage.Die(deathAmount, centre);
                 if (dead) {
                     UnityEngine.Object.Destroy(foliage.gameObject);
                     livingFoliage.RemoveAt(i);

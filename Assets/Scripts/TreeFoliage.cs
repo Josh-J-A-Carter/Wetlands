@@ -32,9 +32,9 @@ public class TreeFoliage : MonoBehaviour {
         transform.position = position;
     }
 
-    public void Grow(float amount) {
+    public void Grow(float amount, Vector3 treeCentre) {
         if (!initialised) return;
-        
+
         if (growthPercent >= 1) return;
 
         if (deathPercent > 0) return;
@@ -46,17 +46,23 @@ public class TreeFoliage : MonoBehaviour {
         transform.localScale = new(scale, scale, scale);
 
         // Change colour here
-        foreach (Material mat in materials) mat.color = GetCurrentColour();
+        foreach (Material mat in materials) {
+            mat.SetColor("_Tint", GetCurrentColour());
+            mat.SetVector("_TreeCentreWS", treeCentre);
+        }
     }
 
 
     /// <summary>
     /// Increase death percentage by amount. Returns true if dead & ready for abscission, false otherwise
     /// </summary>
-    public bool Die(float amount) {
+    public bool Die(float amount, Vector3 treeCentre) {
         deathPercent += amount;
 
-        foreach (Material mat in materials) mat.color = GetCurrentColour();
+        foreach (Material mat in materials) {
+            mat.SetColor("_Tint", GetCurrentColour());
+            mat.SetVector("_TreeCentreWS", treeCentre);
+        }
 
         return deathPercent >= 1;
     }
