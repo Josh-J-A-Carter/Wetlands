@@ -15,4 +15,7 @@ public class TreeFoliageParameters : ScriptableObject {
 
     [field: SerializeField]
     public Color deadGrowthColour { get; private set; } = Color.orangeRed;
+
+    [field: SerializeField, Range(0.0f, 1.0f)]
+    public float stippleBeginThreshold = 0.75f;
 }

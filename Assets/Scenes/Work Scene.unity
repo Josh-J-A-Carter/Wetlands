@@ -740,7 +740,7 @@ MonoBehaviour:
     minBranchingAngle: 0.75
     maxBranchingAngle: 0.95
     maxDirectionChangeAngle: 0.1
-    widthToLenGrowthRatio: 0.01
+    widthToLenGrowthRatio: 0.015
     internodeLength: 0.5
     budDeletionDepth: 4
     phyllotaxy: 0

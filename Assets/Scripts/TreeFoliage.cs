@@ -62,6 +62,7 @@ public class TreeFoliage : MonoBehaviour {
         foreach (Material mat in materials) {
             mat.SetColor("_Tint", GetCurrentColour());
             mat.SetVector("_TreeCentreWS", treeCentre);
+            mat.SetFloat("_Stipple", (deathPercent - param.stippleBeginThreshold) / (1.0f - param.stippleBeginThreshold));
         }
 
         return deathPercent >= 1;

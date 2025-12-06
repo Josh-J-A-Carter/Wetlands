@@ -3,6 +3,7 @@ Shader "Custom/Foliage Shader" {
         _MainTex ("Texture", 2D) = "white" {}
         _Tint ("Tint", Color) = (1, 1, 1, 1)
         _TreeCentreWS ("Tree Centre (World Space)", Vector) = (0, 0, 0, 0)
+        _Stipple ("Stipple Strength", Range(0, 1)) = 0
     }
 
     SubShader {
@@ -21,6 +22,7 @@ Shader "Custom/Foliage Shader" {
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Stipple.hlsl"
 
             struct attributes {
                 float3 positionOS : POSITION;
@@ -33,7 +35,10 @@ Shader "Custom/Foliage Shader" {
             };
 
             sampler2D _MainTex;
+            float4 _MainTex_TexelSize;
             float4 _MainTex_ST;
+
+            float _Stipple;
 
             interpolators vert(attributes input) {
                 interpolators output;
@@ -49,7 +54,10 @@ Shader "Custom/Foliage Shader" {
             float4 frag(interpolators input) : SV_Target {
                 float4 col = tex2D(_MainTex, input.uv);
 
-                if (col.a == 0) discard;
+                float stp = stipple(input.uv, _MainTex_TexelSize, _Stipple);
+
+                bool transparent = stp * col.a <= 0;
+                if (transparent) discard;
 
                 return 0;
             }
@@ -70,6 +78,7 @@ Shader "Custom/Foliage Shader" {
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Stipple.hlsl"
 
             struct attributes {
                 float4 positionOS : POSITION;
@@ -84,9 +93,12 @@ Shader "Custom/Foliage Shader" {
             };
 
             sampler2D _MainTex;
+            float4 _MainTex_TexelSize;
             float4 _MainTex_ST;
 
             float4 _Tint;
+
+            float _Stipple;
 
             float3 _TreeCentreWS;
 
@@ -118,7 +130,10 @@ Shader "Custom/Foliage Shader" {
             float4 frag (interpolators input) : SV_Target {
                 float4 col = tex2D(_MainTex, input.uv);
 
-                if (col.a == 0) discard;
+                float stp = stipple(input.uv, _MainTex_TexelSize, _Stipple);
+                
+                // minus 0.5 as a threshold to prevent floating point issues
+                if (stp <= 0 || (col.a - 0.5) <= 0) discard;
 
                 float shadowAmount = MainLightRealtimeShadow(input.shadowCoords);
 
