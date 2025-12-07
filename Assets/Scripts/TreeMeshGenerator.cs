@@ -125,7 +125,6 @@ public static class TreeMeshGenerator {
         
         // Connect the branch base to within the branch, in case it doesn't perfectly line up once projected
         int v0 = AddVertex(state, parentCentre.position, Vector3.zero);
-        GizmoManager.AddGizmo(parentCentre.position * state.tree.transform.lossyScale.x, Color.red);
 
         for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
             int v1 = childRing.GetNode(i).index;

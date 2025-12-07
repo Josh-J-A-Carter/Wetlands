@@ -1,11 +1,11 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class Tree : MonoBehaviour {
 
-    public const float GROWTH_TICK_DELAY = 0.005f;
     public const float GROWTH_TICK_INCR = 0.0001f;
 
     [SerializeField]
@@ -23,14 +23,12 @@ public class Tree : MonoBehaviour {
         foreach (TreeFoliage f in foliage) Destroy(f.gameObject);
     }
 
-    public void Start() {
+    public void Awake() {
         ResetTree();
         
         // Make the mesh
         mesh = new();
         GetComponent<MeshFilter>().mesh = mesh;
-
-        StartCoroutine(GrowthTick());
     }
 
     public TreeParameters CurrentParameters() {
@@ -42,33 +40,56 @@ public class Tree : MonoBehaviour {
     }
 
 
-    IEnumerator GrowthTick() {
-        while (true) {
-            // Calculate light absorbed
-            float light = 1.0f;
+    public void GrowthTick() {
+        // Calculate light absorbed
+        float light = 1.0f;
 
-            // Growth
-            trunk.Grow(light, Vector3.zero, currentParameters);
+        // Growth
+        trunk.Grow(light, Vector3.zero, currentParameters);
 
-            // Recursively add new side branches
+        // Recursively add new side branches
 
-            // Update the mesh
-            TreeMesh tm = TreeMeshGenerator.Generate(this, MeshResolutionByDepth);
+        // Update the mesh
+        TreeMesh tm = TreeMeshGenerator.Generate(this, MeshResolutionByDepth);
 
-            mesh.Clear();
+        mesh.Clear();
 
-            mesh.vertices = tm.vertices.ToArray();
-            mesh.triangles = tm.triangles.ToArray();
+        mesh.vertices = tm.vertices.ToArray();
+        mesh.triangles = tm.triangles.ToArray();
 
-            mesh.RecalculateNormals();
-
-            yield return new WaitForSeconds(GROWTH_TICK_DELAY);
-        }
+        mesh.RecalculateNormals();
     }
 
     static int MeshResolutionByDepth(int depth) {
         if (depth <= 1) return 4;
         return 3;
+    }
+
+    public void UpdateGrid(Grid3D grid) {
+        List<TreeBranch> currentIteration = new() { trunk };
+
+        while (currentIteration.Count > 0) {
+            List<TreeBranch> nextIteration = new();
+
+            foreach (TreeBranch branch in currentIteration) {
+                if (branch.GetDepth() > 1) continue;
+
+                for (int i = 0 ; i < branch.NodeCount() - 1 ; i += 1) {
+                    TreeNode node1 = branch.GetNode(i).Item1;
+                    TreeNode node2 = branch.GetNode(i + 1).Item1;
+
+                    Vector3 p = node1.position + Origin();
+                    Vector3 dir = node2.position - node1.position;
+                    float length = dir.magnitude;
+                    float radius = node1.width;
+                    grid.AddRayWorldSpace(p, dir, radius, length);
+                }
+
+                foreach (TreeBranch child in branch.GetAllSideBranches()) nextIteration.Add(child);
+            }
+
+            currentIteration = nextIteration;
+        }
     }
 }
 

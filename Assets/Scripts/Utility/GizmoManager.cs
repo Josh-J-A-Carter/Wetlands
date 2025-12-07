@@ -21,7 +21,7 @@ public class GizmoManager : MonoBehaviour {
 
     void Start() {
         if (instance) {
-            Destroy(this);
+            Destroy(gameObject);
             return;
         }
 
@@ -47,8 +47,9 @@ public class GizmoManager : MonoBehaviour {
                 Gizmos.DrawLine(g.start, g.end);
             }
 
-            else Gizmos.DrawSphere(g.start, 0.005f);
+            else Gizmos.DrawSphere(g.start, 0.05f);
         }
+
         gizmos.Clear();
     }
 
