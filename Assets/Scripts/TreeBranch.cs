@@ -13,6 +13,8 @@ public class TreeBranch {
 
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
+
+    const float MIN_BRANCH_PASS_WIDTH = 0.15f;
     
     int depth;
 
@@ -43,10 +45,10 @@ public class TreeBranch {
         this.depth = depth;
         this.preSplitCount = preSplitCount;
 
-        nodes.Add(new(startPos, START_WIDTH));
+        nodes.Add(new(parent, startPos, START_WIDTH));
 
         terminusDirection = direction.normalized;
-        terminus = new(startPos + terminusDirection * START_LENGTH, START_WIDTH);
+        terminus = new(parent, startPos + terminusDirection * START_LENGTH, START_WIDTH);
 
         // Include some random variation for each branch to make it look more natural
         phyllotaxyBasis = MeshUtility.PlaneOrthoBasis(terminusDirection, MeshUtility.RandomVector(), Vector3.zero);
@@ -94,7 +96,7 @@ public class TreeBranch {
         if (index == NodeCount() - 1) return new(terminus, terminusDirection);
 
         int nextIndex = index + 1;
-        Vector3 dir = nextIndex == NodeCount() - 1 ? terminusDirection : (nodes[nextIndex].position - nodes[index].position);
+        Vector3 dir = nextIndex == NodeCount() - 1 ? terminusDirection : (nodes[nextIndex].positionLocal - nodes[index].positionLocal);
         
         return new(nodes[index], dir.normalized);
     }
@@ -125,6 +127,11 @@ public class TreeBranch {
         
         if (HasReachedMaxGrowth(param)) return;
 
+        if (IsPhysicallyBlocked(param)) {
+            GizmoManager.AddGizmo(terminus.positionWorld, Color.blue);
+            return;
+        }
+
         float growthVal = GrowthFactor(param) * light;
         float lengthGrowthFactor = growthVal * Tree.GROWTH_TICK_INCR;
         float widthGrowthFactor = param.widthToLenGrowthRatio * growthVal * Tree.GROWTH_TICK_INCR;
@@ -134,7 +141,7 @@ public class TreeBranch {
 
         // Recurse on child branches
         foreach ((int offshootIndex, TreeBranch branch) in sideBranches) {
-            Vector3 offshootDir = (branch.nodes[0].position - nodes[offshootIndex].position).normalized;
+            Vector3 offshootDir = (branch.nodes[0].positionLocal - nodes[offshootIndex].positionLocal).normalized;
             Vector3 deltaPosPrime = deltaPos + widthGrowthFactor * offshootDir;
             branch.Grow(light, deltaPosPrime, param);
         }
@@ -144,7 +151,7 @@ public class TreeBranch {
 
         UpdateFoliage(light, param);
 
-        float internodeLength = (terminus.position - nodes.Last().position).magnitude;
+        float internodeLength = (terminus.positionLocal - nodes.Last().positionLocal).magnitude;
 
         if (internodeLength >= param.internodeLength) NewNode(param);
 
@@ -160,13 +167,28 @@ public class TreeBranch {
             // This parent branch has a non-zero width!
             (TreeNode parentNode, Vector3 stemDir) = GetNode(nodeIndex);
             Vector3 dirInPlane = MeshUtility.OrthoProjToPlane(dir, stemDir, Vector3.zero).normalized;
-            Vector3 startPos = parentNode.position + dirInPlane * parentNode.width;
+            Vector3 startPos = parentNode.positionLocal + dirInPlane * parentNode.width;
 
             TreeBranch sideBranch = new(parent, this, startPos, dir, depth + 1);
             sideBranches.Add(new(nodeIndex, sideBranch));
 
             inactiveBuds.RemoveAt(arrayIndex);
         }
+    }
+
+    private bool IsPhysicallyBlocked(TreeParameters param) {
+        if (IsTerminalBranch(param)) return false;
+
+        // Check that the branch won't grow into a space already occupied by other branches
+        (TreeNode preTerminus, Vector3 _) = GetNode(NodeCount() - 2);
+
+        Vector3 start = preTerminus.positionLocal;
+        Vector3 end = terminus.positionLocal;
+
+        GridSet inclusionRay = TreeManager.Grid().CastRayWorldSpace(end, terminusDirection, MIN_BRANCH_PASS_WIDTH, param.internodeLength);
+        GridSet exclusionRay = TreeManager.Grid().CastRayWorldSpace(start, terminusDirection, MIN_BRANCH_PASS_WIDTH, (start - end).magnitude);
+
+        return TreeManager.Grid().IsOccupied(inclusionRay, exclusionRay);
     }
 
     private void NewNode(TreeParameters param) {
@@ -190,12 +212,12 @@ public class TreeBranch {
             Vector3 b2 = v2 * Mathf.Cos(theta) + dir2 * Mathf.Sin(theta);
 
             // b2 becomes a separate branch     **with the same depth**
-            Vector3 startPos = terminus.position + b2 * terminus.width;
+            Vector3 startPos = terminus.positionLocal + b2 * terminus.width;
             TreeBranch sideBranch = new(parent, this, startPos, NewTerminusDirection(param, b2), depth, preSplitCount: nodes.Count - 1);
             sideBranches.Add(new(nodes.Count - 1, sideBranch));
 
             // b1 becomes the new terminal direction for this branch
-            terminus = new(terminus.position, 0.0f);
+            terminus = new(parent, terminus.positionLocal, 0.0f);
             terminusDirection = NewTerminusDirection(param, b1);
 
             // We do *not* add inactive buds at this node
@@ -206,7 +228,7 @@ public class TreeBranch {
         }
 
         else {
-            terminus = new(terminus.position, 0.0f);
+            terminus = new(parent, terminus.positionLocal, 0.0f);
             terminusDirection = NewTerminusDirection(param, terminusDirection);
 
             //  Buds
@@ -400,7 +422,7 @@ public class TreeBranch {
         float thetaPrime = theta + Mathf.PI / 2;
         Vector3 forward = Mathf.Cos(thetaPrime) * localBasis.v1 + Mathf.Sin(thetaPrime) * localBasis.v2;
 
-        Vector3 midpoint = (terminus.position + nodes.Last().position) / 2;
+        Vector3 midpoint = (terminus.positionWorld + nodes.Last().positionWorld) / 2;
 
         foliage.SetRotation(forward, upward);
         foliage.SetPosition(midpoint);
@@ -417,7 +439,7 @@ public class TreeBranch {
     /// </summary>
     /// <returns></returns>
     private Vector3 GetFoliageLogicalCentre() {
-        if (depth <= 1) return nodes[0].position + parent.Origin();
+        if (depth <= 1) return nodes[0].positionLocal;
 
         return parentBranch.GetFoliageLogicalCentre();
     }
@@ -431,8 +453,8 @@ public class TreeBranch {
 
             if (!foliage) continue;
 
-            Vector3 midpoint = (GetNode(at).Item1.position + GetNode(at + 1).Item1.position) / 2;
-            foliage.SetPosition(parent.Origin() + midpoint);
+            Vector3 midpoint = (GetNode(at).Item1.positionWorld + GetNode(at + 1).Item1.positionWorld) / 2;
+            foliage.SetPosition(midpoint);
 
             Vector3 centre = GetFoliageLogicalCentre();
 
@@ -464,16 +486,20 @@ public class TreeBranch {
 
 
 public class TreeNode {
-    public Vector3 position { get; private set; }
+    Tree parent;
+    public Vector3 positionLocal { get; private set; }
+
+    public Vector3 positionWorld => parent.Origin() + positionLocal;
     public float width { get; private set; }
 
-    public TreeNode(Vector3 position, float width) {
-        this.position = position;
+    public TreeNode(Tree parent, Vector3 position, float width) {
+        this.parent = parent;
+        this.positionLocal = position;
         this.width = width;
     }
 
     public void Translate(Vector3 deltaPos) {
-        position += deltaPos;
+        positionLocal += deltaPos;
     }
 
     public void Enlarge(float deltaWidth) {

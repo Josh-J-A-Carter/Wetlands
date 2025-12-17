@@ -39,6 +39,10 @@ public class TreeManager : MonoBehaviour {
         grid.DrawGizmos();
     }
 
+    public static Grid3D Grid() {
+        return instance.grid;
+    }
+
     IEnumerator Tick() {
         while (true) {
             grid = new(gridOrigin, gridX, gridY, gridZ, gridDensity);

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Assertions;
 
 
 public class Grid3D {
@@ -24,7 +25,7 @@ public class Grid3D {
     /// </summary>
     HashSet<int> gridOccupancy = new();
 
-    const int ID_MULT_X = 1, ID_MULT_Y = 1_000, ID_MULT_Z = 1_000_000;
+    int idMultX, idMultY, idMultZ;
 
 
     public Grid3D(Vector3 origin, int lengthX, int lengthY, int lengthZ, int gridDensity) {
@@ -36,18 +37,17 @@ public class Grid3D {
 
         this.gridDensity = gridDensity;
 
-        // for (int x = MinPointGridSpace().x ; x <= MaxPointGridSpace().x ; x += 1) {
-        //     for (int z = MinPointGridSpace().z ; z <= MaxPointGridSpace().z ; z += 1) {
-        //         AddOccupied(new(x, MinPointGridSpace().y, z));
-        //     }
-        // }
-        // AddRayWorldSpace(new(2, 2, 2), new(1, 1, 1), 0.2f, 3.0f);
+        idMultX = 1;
+        idMultY = idMultX * lengthX * gridDensity * 2;
+        idMultZ = idMultY * lengthY * gridDensity * 2;
     }
 
-    public void AddRayWorldSpace(Vector3 p, Vector3 dir, float radius, float length) {
+    public GridSet CastRayWorldSpace(Vector3 p, Vector3 dir, float radius, float length) {
+        GridSet set = new(this);
+
         dir = dir.normalized;
 
-        if (MeshUtility.Approximately(dir.magnitude, 0)) return;
+        if (MeshUtility.Approximately(dir.magnitude, 0)) return set;
 
         PlaneOrthoBasis basis = MeshUtility.PlaneOrthoBasis(dir);
 
@@ -58,36 +58,61 @@ public class Grid3D {
             for (float r = 0 ; r <= radius ; r += 1.0f / gridDensity) {
                 for (float theta = 0 ; theta <= 2 * Mathf.PI ; theta += 1.0f / (r * gridDensity)) {
                     Vector3 circleWS = centreWS + r * Mathf.Cos(theta) * basis.v1 + r * Mathf.Sin(theta) * basis.v2;
-                    AddPointWorldSpace(circleWS);
+                    set.AddPointID(GridSpaceToIDSpace(WorldSpaceToGridSpace(circleWS)));
                 }
             }
         }
+
+        return set;
     }
 
-    public void AddPointWorldSpace(Vector3 pos) {
-        AddPointGridSpace(WorldSpaceToGridSpace(pos));
+    public void SetOccupied(GridSet set) {
+        Assert.IsTrue(set.GetGrid() == this || set.GetGrid() == GridSet.Empty.GetGrid());
+
+        foreach (int id in set.GetPointIDs()) {
+            if (IsInBoundsIDSpace(id) == false) continue;
+
+            gridOccupancy.Add(id);
+        }
     }
 
-    void AddPointGridSpace(Vector3Int pos) {
-        // Only add if the point is within the bounds
+    public bool IsOccupied(GridSet include, GridSet exclude) {
+        Assert.IsTrue(include.GetGrid() == this || include.GetGrid() == GridSet.Empty.GetGrid());
+        Assert.IsTrue(exclude.GetGrid() == this || exclude.GetGrid() == GridSet.Empty.GetGrid());
+
+        // If there is an element 'x' in 'include' that is found in the grid, such that 'x' is not in 'exclude',
+        // then return true
+
+        foreach (int id in include.GetPointIDs()) {
+            if (gridOccupancy.Contains(id) == false) continue;
+
+            if (exclude.GetPointIDs().Contains(id)) continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    int GridSpaceToIDSpace(Vector3Int pos) {
+        return idMultX * pos.x + idMultY * pos.y + idMultZ * pos.z;
+    }
+
+    Vector3Int IDSpaceToGridSpace(int id) {
+        int x = id % idMultY / idMultX;
+        int y = (id % idMultZ - x) / idMultY;
+        int z = (id - x - y) / idMultZ;
+        return new(x, y, z);
+    }
+
+    bool IsInBoundsIDSpace(int id) {
+        return IsInBoundsGridSpace(IDSpaceToGridSpace(id));
+    }
+
+    bool IsInBoundsGridSpace(Vector3Int gs) {
         Vector3Int min = MinPointGridSpace();
         Vector3Int max = MaxPointGridSpace();
-        
-        if (pos.x < min.x || pos.y < min.y || pos.z < min.z) return;
-        if (pos.x > max.x || pos.y > max.y || pos.z > max.z) return;
-
-        gridOccupancy.Add(GridSpaceToSetID(pos));
-    }
-
-    int GridSpaceToSetID(Vector3Int pos) {
-        return ID_MULT_X * pos.x + ID_MULT_Y * pos.y + ID_MULT_Z * pos.z;
-    }
-
-    Vector3Int SetIDToGridSpace(int id) {
-        int x = id % ID_MULT_Y / ID_MULT_X;
-        int y = (id % ID_MULT_Z - x) / ID_MULT_Y;
-        int z = (id - x - y) / ID_MULT_Z;
-        return new(x, y, z);
+        return (gs.x >= min.x) && (gs.y >= min.y) && (gs.z >= min.z) && (gs.x <= max.x) && (gs.y <= max.y) && (gs.z <= max.z);
     }
 
 
@@ -125,7 +150,7 @@ public class Grid3D {
 
         // Draw all occupied cells
         foreach (int pointID in gridOccupancy) {
-            Vector3Int pointGridSpace = SetIDToGridSpace(pointID);
+            Vector3Int pointGridSpace = IDSpaceToGridSpace(pointID);
             Vector3 pointWorldSpace = GridSpaceToWorldSpace(pointGridSpace);
             GizmoManager.AddGizmo(pointWorldSpace, Color.red);
         }
@@ -139,5 +164,32 @@ public class Grid3D {
 
     public Vector3 GridSpaceToWorldSpace(Vector3Int gridSpace) {
         return (Vector3) gridSpace / gridDensity + originWorldSpace;
+    }
+}
+
+public class GridSet {
+
+    public static GridSet Empty { get; private set; } = new(null);
+    Grid3D grid;
+    List<int> pointIDs = new();
+
+    /// <summary>
+    /// A grid set is specific to a particular grid; it must not be used for another instance of Grid3D.
+    /// </summary>
+    /// <param name="grid"></param>
+    public GridSet(Grid3D grid) {
+        this.grid = grid;
+    }
+
+    public Grid3D GetGrid() {
+        return grid;
+    }
+    
+    public void AddPointID(int id) {
+        pointIDs.Add(id);
+    }
+
+    public List<int> GetPointIDs() {
+        return pointIDs;
     }
 }

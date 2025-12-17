@@ -124,7 +124,7 @@ public static class TreeMeshGenerator {
             TreeMeshNodeRing parentRing, TreeMeshNodeRing childRing, TreeMeshNodeRing nextChildRing, PlaneOrthoBasis attachmentBasis) {
         
         // Connect the branch base to within the branch, in case it doesn't perfectly line up once projected
-        int v0 = AddVertex(state, parentCentre.position, Vector3.zero);
+        int v0 = AddVertex(state, parentCentre.positionLocal, Vector3.zero);
 
         for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
             int v1 = childRing.GetNode(i).index;
@@ -139,7 +139,7 @@ public static class TreeMeshGenerator {
         for (int i = 0 ; i < childRing.Resolution() ; i += 1) {
             // Determine which mesh nodes to insert this between
             TreeMeshNode baseNode = childRing.GetNode(i);
-            float theta = MeshUtility.PolygonVertexToAngle(baseNode.position, attachmentBasis, parentCentre.position);
+            float theta = MeshUtility.PolygonVertexToAngle(baseNode.position, attachmentBasis, parentCentre.positionLocal);
             // We have (2 * PI / n) * i =< theta =< (2 * PI / n) * (i + 1) for some integer i in [0, resolution - 1]
             // i =< theta * n / (2 * PI) =< i + 1
             // So i = floor(theta * n / (2 * PI))
@@ -149,7 +149,7 @@ public static class TreeMeshGenerator {
             TreeMeshNode right = parentRing.GetNode(vertexIndex + 1);
 
             // Determine if baseNode occurs above or below the plane in which parentRing's polygon occurs
-            float belowOrAbove = Vector3.Dot(attachmentBasis.normal, baseNode.position - parentCentre.position);
+            float belowOrAbove = Vector3.Dot(attachmentBasis.normal, baseNode.position - parentCentre.positionLocal);
 
             Vector3 v1 = right.position - left.position;
             Vector3 v2 = left.neighbourUp.position - left.position;
@@ -234,7 +234,7 @@ public static class TreeMeshGenerator {
             // Find the vertex positions & normals
             PlaneOrthoBasis basis = MeshUtility.PlaneOrthoBasis(normal);
             if (previousBasis != null) basis = MeshUtility.PlaneOrthoBasis(normal, previousBasis.v1, previousBasis.v2);
-            (List<Vector3> positions, List<Vector3> normals) = MeshUtility.ConstructRegularPolygonWithNormals(basis, node.position, node.width, resolution);
+            (List<Vector3> positions, List<Vector3> normals) = MeshUtility.ConstructRegularPolygonWithNormals(basis, node.positionLocal, node.width, resolution);
 
             meshNodes = new();
             for (int i = 0 ; i < positions.Count ; i += 1) {

@@ -15,6 +15,8 @@ public class GizmoManager : MonoBehaviour {
         }
     }
 
+    const int MAX = 5_000;
+
     static List<GizmoData> gizmos = new();
 
     static GizmoManager instance;
@@ -29,10 +31,14 @@ public class GizmoManager : MonoBehaviour {
     }
 
     static public void AddGizmo(Vector3 p, Color col) {
+        if (gizmos.Count >= MAX) return;
+
         gizmos.Add(new(p, Vector3.zero, col));
     }
 
     static public void AddGizmo(Vector3 start, Vector3 end, Color col) {
+        if (gizmos.Count >= MAX) return;
+
         gizmos.Add(new(start, end, col));
     }
 

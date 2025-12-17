@@ -17,7 +17,7 @@ public class Tree : MonoBehaviour {
     Mesh mesh;
 
     public void ResetTree() {
-        trunk = new(this, null, Vector3.zero, Vector3.up, 0);
+        trunk = new(this, null, transform.position, Vector3.up, 0);
 
         TreeFoliage[] foliage = GetComponentsInChildren<TreeFoliage>();
         foreach (TreeFoliage f in foliage) Destroy(f.gameObject);
@@ -78,11 +78,12 @@ public class Tree : MonoBehaviour {
                     TreeNode node1 = branch.GetNode(i).Item1;
                     TreeNode node2 = branch.GetNode(i + 1).Item1;
 
-                    Vector3 p = node1.position + Origin();
-                    Vector3 dir = node2.position - node1.position;
+                    Vector3 p = node1.positionWorld;
+                    Vector3 dir = node2.positionWorld - node1.positionWorld;
                     float length = dir.magnitude;
                     float radius = node1.width;
-                    grid.AddRayWorldSpace(p, dir, radius, length);
+                    GridSet ray = grid.CastRayWorldSpace(p, dir, radius, length);
+                    grid.SetOccupied(ray);
                 }
 
                 foreach (TreeBranch child in branch.GetAllSideBranches()) nextIteration.Add(child);
