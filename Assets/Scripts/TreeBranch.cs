@@ -14,7 +14,7 @@ public class TreeBranch {
     const float START_WIDTH = 0.001f;
     const float START_LENGTH = 0.001f;
 
-    const float MIN_BRANCH_PASS_WIDTH = 0.15f;
+    const float MIN_BRANCH_PASS_WIDTH = 0.3f;
     
     int depth;
 
@@ -182,8 +182,8 @@ public class TreeBranch {
         // Check that the branch won't grow into a space already occupied by other branches
         (TreeNode preTerminus, Vector3 _) = GetNode(NodeCount() - 2);
 
-        Vector3 start = preTerminus.positionLocal;
-        Vector3 end = terminus.positionLocal;
+        Vector3 start = preTerminus.positionWorld;
+        Vector3 end = terminus.positionWorld;
 
         GridSet inclusionRay = TreeManager.Grid().CastRayWorldSpace(end, terminusDirection, MIN_BRANCH_PASS_WIDTH, param.internodeLength);
         GridSet exclusionRay = TreeManager.Grid().CastRayWorldSpace(start, terminusDirection, MIN_BRANCH_PASS_WIDTH, (start - end).magnitude);
